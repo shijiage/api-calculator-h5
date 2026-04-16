@@ -1,0 +1,28 @@
+{
+	"bsonType": "object",
+	"required": ["openid", "login_at"],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"openid": {
+			"bsonType": "string",
+			"description": "用户 openid"
+		},
+		"login_at": {
+			"bsonType": "date",
+			"description": "登录时间（服务端 Date）"
+		},
+		"login_time": {
+			"bsonType": "string",
+			"description": "东八区可读时间，便于控制台查看"
+		},
+		"is_new": {
+			"bsonType": "bool",
+			"description": "是否本次为首次注册"
+		}
+	}
+}

@@ -1,0 +1,10 @@
+node_modules/
+unpackage/
+.hbuilderx/
+.DS_Store
+
+# ReCode local database
+.recode
+
+# 微信小程序密钥（随云函数上传，勿提交仓库）
+uniCloud-aliyun/cloudfunctions/login-by-wx/config.json

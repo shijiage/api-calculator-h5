@@ -1,0 +1,10 @@
+{
+	"name": "report-records",
+	"version": "1.0.0",
+	"description": "用户性价比报告历史读写（calc_report_records）",
+	"main": "index.js",
+	"cloudfunction-config": {
+		"memorySize": 256,
+		"timeout": 60
+	}
+}

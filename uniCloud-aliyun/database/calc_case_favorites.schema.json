@@ -1,0 +1,24 @@
+{
+	"bsonType": "object",
+	"required": ["openid", "case_id"],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"openid": {
+			"bsonType": "string",
+			"description": "用户 openid"
+		},
+		"case_id": {
+			"bsonType": "string",
+			"description": "案例编号，如 LW-001"
+		},
+		"updated_at": {
+			"bsonType": "long",
+			"description": "最近收藏时间（毫秒时间戳）"
+		}
+	}
+}

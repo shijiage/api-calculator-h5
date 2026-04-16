@@ -1,0 +1,59 @@
+{
+	"pages": [
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F7F8FA"
+			}
+		},
+		{
+			"path": "pages/login/login",
+			"style": {
+				"navigationBarTitleText": "登录",
+				"navigationStyle": "custom",
+				"backgroundColor": "#F7F8FA"
+			}
+		},
+		{
+			"path": "pages/records/records",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F7F8FA"
+			}
+		},
+		{
+			"path": "pages/mine/mine",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F7F8FA"
+			}
+		},
+		{
+			"path": "pages/report/report",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F7F8FA"
+			}
+		},
+		{
+			"path": "pages/test-cases/test-cases",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F3F5F9"
+			}
+		}
+	],
+	"globalStyle": {
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "性价比助手",
+		"navigationBarBackgroundColor": "#F7F8FA",
+		"backgroundColor": "#F7F8FA"
+	},
+	"uniIdRouter": {}
+}

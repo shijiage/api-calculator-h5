@@ -1,0 +1,28 @@
+{
+	"bsonType": "object",
+	"required": ["openid", "siteA", "siteB", "updated_at"],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"openid": {
+			"bsonType": "string",
+			"description": "微信 openid，文档 _id 建议与此相同"
+		},
+		"siteA": {
+			"bsonType": "object",
+			"description": "站点 A 配置（与前端 initialSiteA 结构一致）"
+		},
+		"siteB": {
+			"bsonType": "object",
+			"description": "站点 B 配置"
+		},
+		"updated_at": {
+			"bsonType": "timestamp",
+			"description": "最后保存时间（毫秒时间戳）"
+		}
+	}
+}

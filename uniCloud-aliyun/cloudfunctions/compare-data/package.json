@@ -1,0 +1,10 @@
+{
+	"name": "compare-data",
+	"version": "1.0.0",
+	"description": "用户 A/B 对比草稿存取（按 openid）",
+	"main": "index.js",
+	"cloudfunction-config": {
+		"memorySize": 256,
+		"timeout": 60
+	}
+}

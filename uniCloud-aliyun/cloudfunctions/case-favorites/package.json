@@ -1,0 +1,10 @@
+{
+	"name": "case-favorites",
+	"version": "1.0.0",
+	"description": "案例收藏读写（calc_case_favorites）",
+	"main": "index.js",
+	"cloudfunction-config": {
+		"memorySize": 256,
+		"timeout": 60
+	}
+}
