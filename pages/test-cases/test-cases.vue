@@ -5,11 +5,13 @@
 		<scroll-view class="scroll" scroll-y :show-scrollbar="false">
 			<view class="hero-shell">
 				<view class="hero-card">
-					<text class="hero-card__tag">BENCHMARK FRAMEWORK</text>
 					<text class="hero-card__title">测试案例库</text>
-					<text class="hero-card__desc">
-						基于高频真实场景构建的标准化 Prompt 测试集。精准预估 Token 消耗，为你的 AI 应用成本优化提供数据支撑。
-					</text>
+					<text class="hero-card__desc">按复杂度快速挑选并复制，覆盖 30 个标准案例。</text>
+					<view class="hero-card__meta">
+						<text class="hero-card__meta-item">效率优先</text>
+						<text class="hero-card__meta-dot">·</text>
+						<text class="hero-card__meta-item">即选即用</text>
+					</view>
 				</view>
 			</view>
 
@@ -24,6 +26,11 @@
 					>
 						{{ chip.label }}
 					</view>
+				</view>
+
+				<view v-if="!filteredSections.length" class="empty-state">
+					<text class="empty-state__title">还没有收藏案例</text>
+					<text class="empty-state__desc">点击卡片右上角星标，把常用案例收进这里。</text>
 				</view>
 
 				<view v-for="section in filteredSections" :key="section.key" class="section">
@@ -41,8 +48,24 @@
 						hover-class="case-card--hover"
 					>
 						<view class="case-card__top">
-							<text class="case-card__title">{{ item.title }}</text>
-							<text class="case-card__meta">{{ item.meta }}</text>
+							<view class="case-card__title-wrap">
+								<text class="case-card__title">{{ item.title }}</text>
+								<view class="case-card__tags">
+									<text class="case-card__badge">{{ item.badge }}</text>
+									<text class="case-card__meta">{{ item.meta }}</text>
+								</view>
+							</view>
+							<view
+								class="case-card__fav"
+								:class="{ 'case-card__fav--on': isFavorite(section.key, idx) }"
+								@click="toggleFavorite(section.key, idx)"
+							>
+								<uni-icons
+									:type="isFavorite(section.key, idx) ? 'star-filled' : 'star'"
+									size="24rpx"
+									:color="isFavorite(section.key, idx) ? '#ffffff' : '#6b7482'"
+								/>
+							</view>
 						</view>
 						<view class="case-card__prompt-wrap">
 							<text class="case-card__prompt">{{ item.desc }}</text>
@@ -50,26 +73,9 @@
 						<view class="case-card__foot">
 							<text class="case-card__id">ID:{{ buildCaseId(section.key, idx) }}</text>
 							<view class="case-card__actions">
-								<view
-									class="case-card__fav"
-									:class="{ 'case-card__fav--on': isFavorite(section.key, idx) }"
-									@click="toggleFavorite(section.key, idx)"
-								>
-									<uni-icons
-										:type="isFavorite(section.key, idx) ? 'star-filled' : 'star'"
-										size="22rpx"
-										:color="isFavorite(section.key, idx) ? '#ffffff' : '#1a4a9e'"
-									/>
-									<text
-										class="case-card__fav-text"
-										:class="{ 'case-card__fav-text--on': isFavorite(section.key, idx) }"
-									>
-										{{ isFavorite(section.key, idx) ? '已收藏' : '收藏' }}
-									</text>
-								</view>
 								<view class="case-card__link" @click="copyCase(item, section.key, idx)">
 									<uni-icons type="paperplane" size="22rpx" color="#1a4a9e" />
-									<text class="case-card__link-text">复制</text>
+									<text class="case-card__link-text">复制案例</text>
 								</view>
 							</view>
 						</view>
@@ -98,7 +104,8 @@ const categoryChips = [
 	{ key: 'all', label: '全部' },
 	{ key: 'light', label: '轻度' },
 	{ key: 'medium', label: '中度' },
-	{ key: 'heavy', label: '重度' }
+	{ key: 'heavy', label: '重度' },
+	{ key: 'favorites', label: '仅收藏' }
 ]
 
 const sections = [
@@ -157,6 +164,14 @@ const sections = [
 
 const filteredSections = computed(() => {
 	if (activeCategory.value === 'all') return sections
+	if (activeCategory.value === 'favorites') {
+		return sections
+			.map((section) => ({
+				...section,
+				items: section.items.filter((_, idx) => isFavorite(section.key, idx))
+			}))
+			.filter((section) => section.items.length)
+	}
 	return sections.filter((section) => section.key === activeCategory.value)
 })
 
@@ -254,7 +269,7 @@ function copyCase(item, level, idx) {
 	background: #ffffff;
 	border: 4rpx solid #ffffff;
 	border-radius: 26rpx;
-	padding: 10rpx;
+	padding: 8rpx;
 	margin-bottom: 14rpx;
 	box-shadow:
 		0 0 0 2rpx rgba(255, 255, 255, 0.95),
@@ -264,32 +279,39 @@ function copyCase(item, level, idx) {
 .hero-card {
 	background: linear-gradient(135deg, #1246a3 0%, #2f67d9 100%);
 	border-radius: 20rpx;
-	padding: 22rpx 20rpx 24rpx;
-}
-
-.hero-card__tag {
-	display: block;
-	font-size: 16rpx;
-	letter-spacing: 1.6rpx;
-	color: rgba(255, 255, 255, 0.7);
-	font-weight: 700;
+	padding: 18rpx 20rpx 20rpx;
 }
 
 .hero-card__title {
 	display: block;
-	margin-top: 8rpx;
-	font-size: 56rpx;
-	line-height: 1.1;
+	font-size: 44rpx;
+	line-height: 1.15;
 	font-weight: 700;
 	color: #ffffff;
 }
 
 .hero-card__desc {
 	display: block;
-	margin-top: 12rpx;
-	font-size: 22rpx;
-	line-height: 1.5;
+	margin-top: 8rpx;
+	font-size: 24rpx;
+	line-height: 1.45;
 	color: rgba(255, 255, 255, 0.86);
+}
+
+.hero-card__meta {
+	display: flex;
+	align-items: center;
+	margin-top: 12rpx;
+}
+
+.hero-card__meta-item,
+.hero-card__meta-dot {
+	font-size: 20rpx;
+	color: rgba(255, 255, 255, 0.72);
+}
+
+.hero-card__meta-dot {
+	margin: 0 8rpx;
 }
 
 .content {
@@ -308,7 +330,7 @@ function copyCase(item, level, idx) {
 }
 
 .chip {
-	padding: 10rpx 24rpx;
+	padding: 14rpx 26rpx;
 	border-radius: 999rpx;
 	font-size: 24rpx;
 	font-weight: 600;
@@ -356,7 +378,7 @@ function copyCase(item, level, idx) {
 }
 
 .section__hint {
-	font-size: 20rpx;
+	font-size: 22rpx;
 	color: #8b92a0;
 	font-weight: 600;
 }
@@ -364,7 +386,7 @@ function copyCase(item, level, idx) {
 .case-card {
 	background: #ffffff;
 	border-radius: 20rpx;
-	padding: 22rpx 20rpx 18rpx;
+	padding: 18rpx 18rpx 18rpx;
 	box-shadow: 0 2rpx 8rpx rgba(18, 28, 45, 0.04);
 	margin-bottom: 14rpx;
 }
@@ -379,37 +401,63 @@ function copyCase(item, level, idx) {
 	align-items: flex-start;
 }
 
+.case-card__title-wrap {
+	flex: 1;
+	min-width: 0;
+	padding-right: 16rpx;
+}
+
 .case-card__title {
-	font-size: 42rpx;
+	font-size: 34rpx;
+	line-height: 1.3;
 	font-weight: 700;
 	color: #131823;
 }
 
+.case-card__tags {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10rpx;
+	margin-top: 10rpx;
+}
+
+.case-card__badge,
 .case-card__meta {
 	font-size: 20rpx;
-	font-weight: 700;
-	color: #3f6db7;
-	background: #eaf0fb;
+	font-weight: 600;
 	border-radius: 999rpx;
-	padding: 8rpx 18rpx;
+	padding: 6rpx 16rpx;
+}
+
+.case-card__badge {
+	color: #1a4a9e;
+	background: #eaf0fb;
+}
+
+.case-card__meta {
+	color: #6b7482;
+	background: #f1f3f7;
 }
 
 .case-card__prompt-wrap {
-	margin-top: 16rpx;
-	background: #f1f3f7;
+	margin-top: 14rpx;
+	background: #f6f8fb;
 	border-radius: 12rpx;
-	padding: 16rpx;
+	padding: 14rpx 16rpx;
 }
 
 .case-card__prompt {
-	font-size: 22rpx;
+	font-size: 24rpx;
 	line-height: 1.6;
-	color: #7a8290;
-	font-style: italic;
+	color: #4d5562;
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: 2;
+	overflow: hidden;
 }
 
 .case-card__foot {
-	margin-top: 16rpx;
+	margin-top: 14rpx;
 	display: flex;
 	align-items: center;
 	justify-content: space-between;
@@ -428,34 +476,27 @@ function copyCase(item, level, idx) {
 
 .case-card__fav {
 	display: flex;
+	justify-content: center;
 	align-items: center;
-	background: #f0f4fc;
-	padding: 10rpx 18rpx;
-	border-radius: 10rpx;
-	margin-right: 10rpx;
+	width: 64rpx;
+	height: 64rpx;
+	background: #f5f7fb;
+	border-radius: 16rpx;
+	flex-shrink: 0;
 }
 
 .case-card__fav--on {
 	background: #1a4a9e;
 }
 
-.case-card__fav-text {
-	font-size: 24rpx;
-	font-weight: 600;
-	color: #1a4a9e;
-	margin-left: 6rpx;
-}
-
-.case-card__fav-text--on {
-	color: #ffffff;
-}
-
 .case-card__link {
 	display: flex;
 	align-items: center;
-	background: #f0f4fc;
-	padding: 10rpx 18rpx;
-	border-radius: 10rpx;
+	justify-content: center;
+	background: #eaf0fb;
+	padding: 0 22rpx;
+	height: 64rpx;
+	border-radius: 16rpx;
 }
 
 .case-card__link-text {
@@ -463,6 +504,30 @@ function copyCase(item, level, idx) {
 	font-weight: 600;
 	color: #1a4a9e;
 	margin-left: 6rpx;
+}
+
+.empty-state {
+	background: #ffffff;
+	border-radius: 20rpx;
+	padding: 36rpx 28rpx;
+	text-align: center;
+	box-shadow: 0 2rpx 8rpx rgba(18, 28, 45, 0.04);
+	margin-top: 14rpx;
+}
+
+.empty-state__title {
+	display: block;
+	font-size: 30rpx;
+	font-weight: 700;
+	color: #1f2433;
+}
+
+.empty-state__desc {
+	display: block;
+	margin-top: 10rpx;
+	font-size: 22rpx;
+	line-height: 1.6;
+	color: #7a8290;
 }
 
 .bottom-pad {

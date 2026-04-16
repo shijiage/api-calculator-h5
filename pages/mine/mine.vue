@@ -1,7 +1,7 @@
 <template>
 	<view class="page">
 		<view class="status-bar" :style="{ height: statusBarH + 'px' }" />
-		<mine-page-header title="个人中心" @back="onBack" @settings="onSettings" />
+		<mine-page-header title="个人中心" :show-settings="false" @back="onBack" @settings="onSettings" />
 
 		<scroll-view class="scroll" scroll-y :show-scrollbar="false">
 			<mine-user-profile
@@ -52,6 +52,7 @@ import {
 	minePageDefaults,
 	mineMenuGroups,
 	mineStatLabels,
+	CLOUD_CALL_TIMEOUT_MS,
 	MINE_WX_AVATAR_STORAGE_KEY,
 	MINE_DISPLAY_NICKNAME_STORAGE_KEY
 } from '@/common/data.js'
@@ -106,17 +107,102 @@ onShow(async () => {
 	} catch (e) {
 		avatarUrl.value = ''
 	}
+	const openid = getStoredOpenid()
+	// 若本地没有缓存头像，尝试从云端读取（换机后也可恢复）
+	if (openid && !avatarUrl.value) {
+		try {
+			await loadAvatarFromCloud(openid)
+		} catch (e) {}
+	}
 	readNicknameFromStorage()
 })
 
 const enableWxAvatar = computed(() => !!getStoredOpenid())
 
-function onAvatarChange(url) {
+async function onAvatarChange(url) {
 	if (!url) return
+	// 先本地展示，提升交互速度
 	try {
 		uni.setStorageSync(MINE_WX_AVATAR_STORAGE_KEY, url)
 	} catch (e) {}
 	avatarUrl.value = url
+
+	const openid = getStoredOpenid()
+	if (!openid) return
+
+	let loadingClosed = false
+	showLoading('上传中')
+	try {
+		const guessExtFromUrl = (u) => {
+			try {
+				const m = String(u).match(/\.([a-zA-Z0-9]{1,5})(?:\?|#|$)/)
+				if (!m || !m[1]) return 'jpg'
+				const ext = String(m[1]).toLowerCase()
+				if (ext === 'jpeg' || ext === 'jpg' || ext === 'png' || ext === 'webp' || ext === 'gif') return ext
+			} catch (e) {}
+			return 'jpg'
+		}
+
+		const ext = guessExtFromUrl(url)
+
+		// 1) 下载 tmp 资源到客户端本地临时文件
+		const tempFilePath = await new Promise((resolve, reject) => {
+			uni.downloadFile({
+				url,
+				success: (res) => {
+					if (res && res.tempFilePath) resolve(res.tempFilePath)
+					else reject(new Error('downloadFile: missing tempFilePath'))
+				},
+				fail: (e) => reject(e || new Error('downloadFile failed'))
+			})
+		})
+
+		// 2) 上传到 uniCloud 云存储
+		const up = await uniCloud.uploadFile({
+			filePath: tempFilePath,
+			cloudPath: `avatars/${openid}.${ext}`
+		})
+
+		const fileID = up && up.fileID ? String(up.fileID) : ''
+		if (!fileID) {
+			uni.showToast({ title: '头像上传失败：缺少 fileID', icon: 'none' })
+			return
+		}
+
+		// 3) 把 fileID 写回数据库（云函数只做写入）
+		const res = await uniCloud.callFunction({
+			name: 'user-profile',
+			data: { action: 'set-avatar-fileid', openid, fileID },
+			timeout: CLOUD_CALL_TIMEOUT_MS
+		})
+		const payload = res && res.result ? res.result : null
+		if (!payload || payload.errCode !== 0) {
+			uni.showToast({ title: `头像保存失败：${(payload && payload.errMsg) || '未知错误'}`, icon: 'none' })
+			return
+		}
+
+		// 上传与写库已完成，先关闭 loading，避免临时 URL 转换较慢时一直转圈
+		hideLoading()
+		loadingClosed = true
+
+		// 4) 拉取可展示的临时 URL（失败不影响上传结果）
+		try {
+			const tempUrl = await fileIDToTempURL(fileID)
+			if (tempUrl) {
+				avatarUrl.value = tempUrl
+				try {
+					uni.setStorageSync(MINE_WX_AVATAR_STORAGE_KEY, tempUrl)
+				} catch (e) {}
+			}
+		} catch (e) {}
+
+		uni.showToast({ title: '头像上传成功', icon: 'success' })
+	} catch (e) {
+		const msg = (e && (e.errMsg || e.message)) || '头像上传失败'
+		uni.showToast({ title: msg, icon: 'none' })
+	} finally {
+		if (!loadingClosed) hideLoading()
+	}
 }
 
 function onNicknameChange(name) {
@@ -134,6 +220,33 @@ const uidDisplay = computed(() => {
 	const tail = id.length > 4 ? id.slice(-4) : id
 	return `${id.slice(0, 4)}-****-${tail}`
 })
+
+async function fileIDToTempURL(fileID) {
+	if (!fileID) return ''
+	// 不同端/版本的 uniCloud 可能方法名不同，这里做兜底
+	if (!uniCloud || typeof uniCloud.getTempFileURL !== 'function') return ''
+	const r = await uniCloud.getTempFileURL({ fileList: [{ fileID }] })
+	const url = r && r.fileList && r.fileList[0] ? r.fileList[0].tempFileURL : ''
+	return url ? String(url) : ''
+}
+
+async function loadAvatarFromCloud(openid) {
+	if (!openid) return
+	const res = await uniCloud.callFunction({
+		name: 'user-profile',
+		data: { action: 'get-avatar', openid },
+		timeout: CLOUD_CALL_TIMEOUT_MS
+	})
+	const payload = res && res.result ? res.result : null
+	const fileID = payload && payload.errCode === 0 ? payload.fileID : ''
+	if (!fileID) return
+	const tempUrl = await fileIDToTempURL(fileID)
+	if (!tempUrl) return
+	avatarUrl.value = tempUrl
+	try {
+		uni.setStorageSync(MINE_WX_AVATAR_STORAGE_KEY, tempUrl)
+	} catch (e) {}
+}
 
 const historyTrendTag = computed(() => {
 	return historyCount.value > 0 ? minePageDefaults.historyTrendTag : ''

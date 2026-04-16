@@ -4,7 +4,11 @@
 			<uni-icons type="left" size="40rpx" color="#1a1d24" />
 		</view>
 		<text class="nav__title">{{ title }}</text>
-		<view class="nav__side nav__side--right" @click="emit('settings')">
+		<view
+			class="nav__side nav__side--right"
+			:class="{ 'nav__side--right--hide': !showSettings }"
+			@click="emit('settings')"
+		>
 			<uni-icons type="gear" size="40rpx" color="#1a1d24" />
 		</view>
 	</view>
@@ -15,6 +19,10 @@ defineProps({
 	title: {
 		type: String,
 		default: '个人中心'
+	},
+	showSettings: {
+		type: Boolean,
+		default: true
 	}
 })
 
@@ -39,6 +47,11 @@ const emit = defineEmits(['back', 'settings'])
 
 .nav__side--right {
 	justify-content: center;
+}
+
+.nav__side--right--hide {
+	opacity: 0;
+	pointer-events: none;
 }
 
 .nav__title {

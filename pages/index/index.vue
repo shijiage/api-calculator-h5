@@ -134,7 +134,7 @@ function showFirstCalcGuideIfNeeded() {
 		uni.setStorageSync(FIRST_CALC_GUIDE_SHOWN_KEY, 1)
 	} catch (e) {}
 	uni.showModal({
-		title: '1 分钟上手',
+		title: '30秒上手',
 		content:
 			'① 填写站点 A/B 的充值金额与获得额度\n② 在使用记录里至少各添加一条「消耗额度($) > 0」\n③ 点击「生成性价比对比报告」查看结论',
 		showCancel: false,

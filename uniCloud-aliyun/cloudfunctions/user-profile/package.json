@@ -1,0 +1,10 @@
+{
+  "name": "user-profile",
+  "version": "1.0.0",
+  "description": "用户资料：头像上传与读取（按 openid）",
+  "main": "index.js",
+  "cloudfunction-config": {
+    "memorySize": 256,
+    "timeout": 60
+  }
+}
