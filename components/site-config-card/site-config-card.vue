@@ -84,7 +84,7 @@
 				</view>
 				<view class="site-card__summary-col site-card__summary-col--right">
 					<text class="site-card__summary-label">实际人民币花费</text>
-					<text class="site-card__summary-num site-card__summary-num--cny">{{ formatCny(metrics.totalCny) }}</text>
+					<text class="site-card__summary-num site-card__summary-num--cny">{{ formatCny(metrics.totalCny, 10, true) }}</text>
 				</view>
 			</view>
 			<view class="site-card__metrics">

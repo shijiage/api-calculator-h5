@@ -146,8 +146,10 @@ export function formatTokens(n) {
 	return `${n}`
 }
 
-export function formatCny(n, decimals = 2) {
-	return `¥${n.toFixed(decimals)}`
+export function formatCny(n, decimals = 2, trimTrailingZeros = false) {
+	const fixed = n.toFixed(decimals)
+	const normalized = trimTrailingZeros ? fixed.replace(/\.?0+$/, '') : fixed
+	return `¥${normalized}`
 }
 
 export function formatCnyPlain(n, decimals = 4) {
