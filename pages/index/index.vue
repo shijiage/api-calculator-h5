@@ -18,6 +18,10 @@
 				@clear="onClearA"
 			/>
 
+			<view v-if="metricsA.recordCount === 0" class="inline-validate">
+				<text class="inline-validate__text">{{ reportValidateMessages.siteA }}</text>
+			</view>
+
 			<view class="compare">
 				<uni-icons type="arrow-up" size="32rpx" color="#d5dae2" class="compare__i compare__i1" />
 				<uni-icons type="arrow-down" size="32rpx" color="#d5dae2" class="compare__i compare__i2" />
@@ -31,15 +35,36 @@
 				@clear="onClearB"
 			/>
 
+			<view v-if="metricsB.recordCount === 0" class="inline-validate">
+				<text class="inline-validate__text">{{ reportValidateMessages.siteB }}</text>
+			</view>
+
 			<view class="accuracy-tip">
 				<uni-icons type="info" size="30rpx" color="#5c6370" />
 				<text class="accuracy-tip__text">{{ COMPARE_USAGE_ACCURACY_HINT }}</text>
 			</view>
 
+			<view v-if="cloudSyncStatus === 'syncing'" class="syncing">
+				<text class="syncing__text">云端同步中…</text>
+			</view>
+
+			<view v-if="cloudSyncStatus === 'failed'" class="sync-fail">
+				<uni-icons type="alert-filled" size="28rpx" color="#d04a4a" />
+				<text class="sync-fail__text">云端同步失败，可重试</text>
+				<view class="sync-fail__cta" @click="retryCloudPersist">
+					<text class="sync-fail__cta-text">重试</text>
+				</view>
+			</view>
+
+			<view v-if="!canGenerateReport" class="report-validate">
+				<uni-icons type="info" size="26rpx" color="#5c6370" />
+				<text class="report-validate__text">{{ reportValidateMessage }}</text>
+			</view>
+
 			<view class="cta-wrap">
-				<view class="cta" hover-class="cta--hover" @click="onReport">
+				<view class="cta" :class="{ 'cta--disabled': !canGenerateReport }" hover-class="cta--hover" @click="onReport">
 					<uni-icons type="bars" size="44rpx" color="#ffffff" />
-					<text class="cta__text">生成性价比对比报告</text>
+					<text class="cta__text">{{ canGenerateReport ? '生成性价比对比报告' : '完善后生成报告' }}</text>
 				</view>
 			</view>
 
@@ -51,7 +76,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, watch } from 'vue'
+import { ref, reactive, onMounted, watch, computed } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import { getStoredOpenid, ensureLoggedInOrPrompt } from '@/common/auth.js'
 import SiteConfigCard from '@/components/site-config-card/site-config-card.vue'
@@ -100,6 +125,19 @@ let suppressPersist = false
 let debounceTimer = null
 let loadingGuardTimer = null
 
+const cloudSyncStatus = ref('idle') // idle | syncing | ok | failed
+const cloudSyncLastError = ref('')
+let cloudSyncFailedToastShown = false
+
+function setCloudSyncFailed(errMsg) {
+	cloudSyncStatus.value = 'failed'
+	cloudSyncLastError.value = String(errMsg || '') || 'sync_failed'
+	if (!cloudSyncFailedToastShown) {
+		cloudSyncFailedToastShown = true
+		uni.showToast({ title: '云端同步失败，已继续本地模式', icon: 'none' })
+	}
+}
+
 function showLoading(title) {
 	uni.showLoading({ title: title || '加载中', mask: true })
 	// 兜底：避免极端情况下 Promise 挂起导致 loading 永不关闭
@@ -126,6 +164,22 @@ function withTimeout(task, ms, msg) {
 		)
 	])
 }
+
+function getReportValidationMessage() {
+	const ma = computeStationMetrics(siteA)
+	const mb = computeStationMetrics(siteB)
+	if (ma.recordCount > 0 && mb.recordCount === 0) return reportValidateMessages.siteB
+	if (ma.recordCount === 0 && mb.recordCount > 0) return reportValidateMessages.siteA
+	if (ma.recordCount === 0 && mb.recordCount === 0) return reportValidateMessages.both
+	// 理论上两边都有记录时不会触达这里，但兜底返回
+	return reportValidateMessages.both
+}
+
+const canGenerateReport = ref(false)
+const reportValidateMessage = ref(reportValidateMessages.both)
+
+const metricsA = computed(() => computeStationMetrics(siteA))
+const metricsB = computed(() => computeStationMetrics(siteB))
 
 function showFirstCalcGuideIfNeeded() {
 	try {
@@ -161,6 +215,7 @@ async function hydrateCompareDraft() {
 	const oid = getStoredOpenid()
 	if (!oid) return
 
+	cloudSyncStatus.value = 'syncing'
 	const cloud = await loadCompareDraftFromCloud(oid)
 	if (!cloud) return
 
@@ -170,6 +225,7 @@ async function hydrateCompareDraft() {
 		applySites(cloud.siteA, cloud.siteB)
 		saveCompareDraftLocal(siteA, siteB, cTs)
 	}
+	cloudSyncStatus.value = 'ok'
 }
 
 function schedulePersist() {
@@ -185,13 +241,28 @@ async function persistCompareDraft() {
 	const ts = saveCompareDraftLocal(siteA, siteB)
 	const oid = getStoredOpenid()
 	if (!oid) return
+
+	cloudSyncStatus.value = 'syncing'
 	const serverTs = await saveCompareDraftToCloud(oid, siteA, siteB)
 	if (serverTs != null && serverTs !== ts) {
 		saveCompareDraftLocal(siteA, siteB, serverTs)
 	}
+	if (serverTs == null) {
+		setCloudSyncFailed('persist_failed')
+		return
+	}
+	cloudSyncStatus.value = 'ok'
 }
 
 watch([siteA, siteB], () => schedulePersist(), { deep: true })
+
+watch([siteA, siteB], () => {
+	const ma = computeStationMetrics(siteA)
+	const mb = computeStationMetrics(siteB)
+	const ok = ma.recordCount > 0 && mb.recordCount > 0
+	canGenerateReport.value = ok
+	reportValidateMessage.value = getReportValidationMessage()
+}, { deep: true, immediate: true })
 
 onMounted(() => {
 	const sys = uni.getSystemInfoSync()
@@ -208,12 +279,16 @@ onShow(async () => {
 		const oid = getStoredOpenid()
 		if (oid) {
 			showLoading('恢复中')
+			cloudSyncStatus.value = 'syncing'
 			try {
 				await withTimeout(
 					saveCompareDraftToCloud(oid, siteA, siteB),
 					12000,
 					'restore_timeout'
 				)
+				cloudSyncStatus.value = 'ok'
+			} catch (e) {
+				setCloudSyncFailed(e?.message || 'restore_failed')
 			} finally {
 				hideLoading()
 			}
@@ -228,7 +303,8 @@ onShow(async () => {
 	try {
 		await withTimeout(hydrateCompareDraft(), 12000, 'hydrate_timeout')
 	} catch (e) {
-		uni.showToast({ title: '云端同步超时，已继续本地模式', icon: 'none' })
+		cloudSyncStatus.value = 'failed'
+		setCloudSyncFailed(e?.message || 'hydrate_failed')
 	} finally {
 		hideLoading()
 	}
@@ -252,42 +328,60 @@ function onUpdateB(next) {
 }
 
 function onClearA() {
-	suppressPersist = true
-	Object.assign(siteA, initialSiteA())
-	suppressPersist = false
-	schedulePersist()
-	uni.showToast({ title: '已清空站点 A', icon: 'none' })
+	uni.showModal({
+		title: '清空站点 A',
+		content: '确定清空站点 A 的配置与使用记录？该操作会同步影响本地对比草稿。',
+		success: (res) => {
+			if (!res.confirm) return
+			suppressPersist = true
+			Object.assign(siteA, initialSiteA())
+			suppressPersist = false
+			schedulePersist()
+			uni.showToast({ title: '已清空站点 A', icon: 'none' })
+		}
+	})
 }
 
 function onClearB() {
-	suppressPersist = true
-	Object.assign(siteB, initialSiteB())
-	suppressPersist = false
-	schedulePersist()
-	uni.showToast({ title: '已清空站点 B', icon: 'none' })
+	uni.showModal({
+		title: '清空站点 B',
+		content: '确定清空站点 B 的配置与使用记录？该操作会同步影响本地对比草稿。',
+		success: (res) => {
+			if (!res.confirm) return
+			suppressPersist = true
+			Object.assign(siteB, initialSiteB())
+			suppressPersist = false
+			schedulePersist()
+			uni.showToast({ title: '已清空站点 B', icon: 'none' })
+		}
+	})
 }
 
 function onRefresh() {
-	suppressPersist = true
-	Object.assign(siteA, initialSiteA())
-	Object.assign(siteB, initialSiteB())
-	suppressPersist = false
-	clearCompareDraft()
-	void clearCompareDraftCloud(getStoredOpenid())
-	uni.showToast({ title: '已重置', icon: 'none' })
+	uni.showModal({
+		title: '重置对比配置',
+		content: '确定要重置为初始状态？本地草稿会被清空，并尝试清除云端草稿。',
+		success: (res) => {
+			if (!res.confirm) return
+			suppressPersist = true
+			Object.assign(siteA, initialSiteA())
+			Object.assign(siteB, initialSiteB())
+			suppressPersist = false
+			clearCompareDraft()
+			void clearCompareDraftCloud(getStoredOpenid())
+			uni.showToast({ title: '已重置', icon: 'none' })
+		}
+	})
 }
 
 async function onReport() {
 	if (!(await ensureLoggedInOrPrompt())) return
-	const ma = computeStationMetrics(siteA)
-	const mb = computeStationMetrics(siteB)
-	if (ma.recordCount === 0 || mb.recordCount === 0) {
-		let content = reportValidateMessages.both
-		if (ma.recordCount > 0 && mb.recordCount === 0) content = reportValidateMessages.siteB
-		if (ma.recordCount === 0 && mb.recordCount > 0) content = reportValidateMessages.siteA
-		uni.showModal({ title: '暂无法生成报告', content, showCancel: false })
+	if (!canGenerateReport.value) {
+		uni.showToast({ title: '请先完善 A/B 使用记录', icon: 'none' })
 		return
 	}
+	const ma = computeStationMetrics(siteA)
+	const mb = computeStationMetrics(siteB)
 	const cmp = compareStations(ma, mb)
 	const payload = buildReportPayload(ma, mb, cmp)
 	let saved = { id: '', cloudSynced: true }
@@ -326,7 +420,33 @@ async function onReport() {
 	}
 	markReportGenerated()
 	trackFunnelEvent('generate_report')
-	uni.navigateTo({ url: '/pages/report/report' })
+	if (saved && saved.id) {
+		uni.navigateTo({ url: '/pages/report/report?id=' + encodeURIComponent(saved.id) })
+	} else {
+		uni.navigateTo({ url: '/pages/report/report' })
+	}
+}
+
+async function retryCloudPersist() {
+	const oid = getStoredOpenid()
+	if (!oid) {
+		cloudSyncStatus.value = 'idle'
+		uni.showToast({ title: '请先登录后再同步', icon: 'none' })
+		return
+	}
+	showLoading('重试同步中')
+	cloudSyncStatus.value = 'syncing'
+	try {
+		const serverTs = await saveCompareDraftToCloud(oid, siteA, siteB)
+		if (serverTs == null) {
+			setCloudSyncFailed('persist_failed')
+			return
+		}
+		cloudSyncStatus.value = 'ok'
+		uni.showToast({ title: '同步成功', icon: 'none' })
+	} finally {
+		hideLoading()
+	}
 }
 </script>
 
@@ -435,6 +555,12 @@ async function onReport() {
 	opacity: 0.92;
 }
 
+.cta--disabled {
+	opacity: 0.6;
+	filter: grayscale(0.2);
+	pointer-events: none;
+}
+
 .cta__text {
 	margin-left: 16rpx;
 	font-size: 30rpx;
@@ -444,5 +570,83 @@ async function onReport() {
 
 .scroll-pad {
 	height: calc(140rpx + env(safe-area-inset-bottom));
+}
+
+.sync-fail {
+	margin: 12rpx 4rpx 0;
+	padding: 16rpx 18rpx;
+	background: #fff5f5;
+	border-radius: 14rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 10rpx;
+}
+
+.sync-fail__text {
+	flex: 1;
+	font-size: 24rpx;
+	color: #8a1f1f;
+	font-weight: 600;
+}
+
+.sync-fail__cta {
+	padding: 10rpx 16rpx;
+	background: #d04a4a;
+	border-radius: 999rpx;
+}
+
+.sync-fail__cta-text {
+	font-size: 22rpx;
+	font-weight: 800;
+	color: #ffffff;
+}
+
+.syncing {
+	margin: 12rpx 4rpx 0;
+	padding: 16rpx 18rpx;
+	background: #eef2f8;
+	border-radius: 14rpx;
+}
+
+.syncing__text {
+	font-size: 24rpx;
+	color: #5c6370;
+	font-weight: 600;
+}
+
+.report-validate {
+	margin: 12rpx 4rpx 0;
+	padding: 16rpx 18rpx;
+	background: #eef2f8;
+	border-radius: 14rpx;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: flex-start;
+	gap: 10rpx;
+}
+
+.report-validate__text {
+	flex: 1;
+	font-size: 24rpx;
+	color: #5c6370;
+	font-weight: 600;
+}
+
+.inline-validate {
+	margin: -10rpx 4rpx 10rpx;
+	padding: 10rpx 12rpx;
+	background: #fff;
+	border-radius: 14rpx;
+	border: 1rpx dashed #e8ebf1;
+}
+
+.inline-validate__text {
+	font-size: 22rpx;
+	color: #8a8f99;
+	line-height: 1.4;
+	font-weight: 600;
 }
 </style>

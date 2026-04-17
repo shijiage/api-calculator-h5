@@ -14,7 +14,8 @@ const FUNNEL_EVENTS = new Set([
 	'fill_first_record',
 	'generate_report',
 	'view_records',
-	'restore_compare'
+	'restore_compare',
+	'tap_share_report'
 ])
 
 function read(key, fallback) {

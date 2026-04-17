@@ -43,13 +43,19 @@
 				</view>
 				<view
 					class="card__restore"
+					:class="{ 'card__restore--disabled': restoringId === item.id }"
 					hover-class="card__restore--hover"
 					@click.stop="onRestoreCompare(item)"
 				>
 					<uni-icons type="loop" size="28rpx" color="#1a4a9e" />
 					<text class="card__restore-text">恢复对比配置并继续计算</text>
 				</view>
-				<view class="card__delete" hover-class="card__delete--hover" @click.stop="onDelete(item)">
+				<view
+					class="card__delete"
+					:class="{ 'card__delete--disabled': deletingId === item.id }"
+					hover-class="card__delete--hover"
+					@click.stop="onDelete(item)"
+				>
 					<uni-icons type="closeempty" size="28rpx" color="#d04a4a" />
 					<text class="card__delete-text">删除记录</text>
 				</view>
@@ -85,6 +91,8 @@ const timeFilter = ref('all')
 const winnerFilter = ref('all')
 const savingFilter = ref('all')
 const sortBy = ref('latest')
+const restoringId = ref('')
+const deletingId = ref('')
 
 const timeFilterOptions = [
 	{ key: 'all', label: '全部时间' },
@@ -109,6 +117,15 @@ function showLoading(title) {
 
 function hideLoading() {
 	uni.hideLoading()
+}
+
+function withTimeout(task, ms, msg) {
+	return Promise.race([
+		task,
+		new Promise((_, reject) =>
+			setTimeout(() => reject(new Error(msg || 'timeout')), ms)
+		)
+	])
 }
 
 function getWinnerByItem(item) {
@@ -185,15 +202,22 @@ function openHistory(id) {
 }
 
 async function onRestoreCompare(item) {
+	if (!item || !item.id) return
+	if (restoringId.value === item.id) return
+	restoringId.value = item.id
+	try {
 	let siteA = item.siteA
 	let siteB = item.siteB
 	if (!reportRecordHasSites(item)) {
 		if (!(await ensureLoggedInOrPrompt({ content: '从云端拉取当时的站点配置需先登录。' }))) return
 		showLoading('恢复配置')
 		try {
-			const got = await getReportSitesByIdAsync(item.id)
+			const got = await withTimeout(getReportSitesByIdAsync(item.id), 12000, 'sites_timeout')
 			siteA = got && got.siteA
 			siteB = got && got.siteB
+		} catch {
+			siteA = null
+			siteB = null
 		} finally {
 			hideLoading()
 		}
@@ -201,11 +225,39 @@ async function onRestoreCompare(item) {
 	if (!siteA || !siteB) {
 		uni.showModal({
 			title: '恢复失败',
-			content: '未能取回该记录的站点配置。可能云端未同步或网络异常，可重试。',
-			confirmText: '重试',
+			content: '未能取回该记录的站点配置。可尝试先同步最新记录，再重试恢复。',
+			confirmText: '同步并重试',
 			cancelText: '取消',
 			success: (res) => {
-				if (res.confirm) void onRestoreCompare(item)
+				if (!res.confirm) return
+				showLoading('同步中')
+				Promise.resolve()
+					.then(() => syncReportHistoryFromCloud())
+					.then(() => getReportSitesByIdAsync(item.id))
+					.then((got) => {
+						siteA = got && got.siteA
+						siteB = got && got.siteB
+						return null
+					})
+					.catch(() => null)
+					.finally(() => {
+						hideLoading()
+						if (!siteA || !siteB) {
+							uni.showModal({
+								title: '仍无法恢复',
+								content: '该记录对应的站点配置可能未在云端保存（或被清理）。建议重新生成新报告后再恢复。',
+								showCancel: false
+							})
+							return
+						}
+						try {
+							setPendingRestoreSites(siteA, siteB)
+							trackFunnelEvent('restore_compare')
+							uni.redirectTo({ url: '/pages/index/index' })
+						} catch (e) {
+							uni.showToast({ title: '写入失败', icon: 'none' })
+						}
+					})
 			}
 		})
 		return
@@ -218,6 +270,10 @@ async function onRestoreCompare(item) {
 	}
 	trackFunnelEvent('restore_compare')
 	uni.redirectTo({ url: '/pages/index/index' })
+	} finally {
+		// 确保无论成功/失败都能恢复可点击状态
+		if (restoringId.value === item.id) restoringId.value = ''
+	}
 }
 
 async function goCalc() {
@@ -226,11 +282,14 @@ async function goCalc() {
 }
 
 function onDelete(item) {
+	if (!item || !item.id) return
+	if (deletingId.value === item.id) return
 	uni.showModal({
 		title: '删除记录',
 		content: '删除后不可恢复，是否继续？',
 		success: async (res) => {
 			if (!res.confirm) return
+			deletingId.value = item.id
 			showLoading('删除中')
 			let result = { localDeleted: false, cloudDeleted: false }
 			try {
@@ -238,6 +297,7 @@ function onDelete(item) {
 			} finally {
 				hideLoading()
 			}
+			deletingId.value = ''
 			if (!result.localDeleted) {
 				uni.showToast({ title: '删除失败', icon: 'none' })
 				return
@@ -435,6 +495,11 @@ function onDelete(item) {
 	opacity: 0.88;
 }
 
+.card__restore--disabled {
+	opacity: 0.55;
+	pointer-events: none;
+}
+
 .card__restore-text {
 	margin-left: 10rpx;
 	font-size: 26rpx;
@@ -454,6 +519,11 @@ function onDelete(item) {
 
 .card__delete--hover {
 	opacity: 0.88;
+}
+
+.card__delete--disabled {
+	opacity: 0.55;
+	pointer-events: none;
 }
 
 .card__delete-text {

@@ -25,7 +25,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { loginByWxCloud, getStoredOpenid } from '@/common/auth.js'
+import { loginByWxCloud, getStoredOpenid, getStoredLoginReturnUrl, clearLoginReturnUrl } from '@/common/auth.js'
 
 const statusBarH = ref(20)
 const loading = ref(false)
@@ -57,7 +57,9 @@ async function onLogin() {
 			icon: 'none'
 		})
 		setTimeout(() => {
-			uni.reLaunch({ url: '/pages/index/index' })
+			const next = getStoredLoginReturnUrl()
+			clearLoginReturnUrl()
+			uni.reLaunch({ url: next || '/pages/index/index' })
 		}, 400)
 	} catch (e) {
 		error.value = e.message || '登录失败，请检查网络与 uniCloud 配置'

@@ -4,6 +4,43 @@ import { markLoginSuccess } from '@/common/analytics.js'
 const STORAGE_OPENID = 'calc_openid'
 const STORAGE_USER_COUNT = 'calc_user_count'
 const STORAGE_LOGIN_AT = 'calc_login_at'
+const STORAGE_LOGIN_RETURN_URL = 'calc_login_return_url'
+
+function buildCurrentPageUrl() {
+	try {
+		const pages = getCurrentPages()
+		const cur = pages[pages.length - 1]
+		const route = cur && cur.route ? String(cur.route) : ''
+		if (!route) return '/pages/index/index'
+		const opts = cur && cur.options ? cur.options : null
+		let qs = ''
+		if (opts && typeof opts === 'object') {
+			const keys = Object.keys(opts).filter((k) => opts[k] !== undefined && opts[k] !== null && String(opts[k]) !== '')
+			if (keys.length > 0) {
+				qs = keys
+					.map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(opts[k]))}`)
+					.join('&')
+			}
+		}
+		return '/' + route + (qs ? `?${qs}` : '')
+	} catch {
+		return '/pages/index/index'
+	}
+}
+
+export function getStoredLoginReturnUrl() {
+	try {
+		return String(uni.getStorageSync(STORAGE_LOGIN_RETURN_URL) || '')
+	} catch {
+		return ''
+	}
+}
+
+export function clearLoginReturnUrl() {
+	try {
+		uni.removeStorageSync(STORAGE_LOGIN_RETURN_URL)
+	} catch (e) {}
+}
 
 export function getStoredOpenid() {
 	return uni.getStorageSync(STORAGE_OPENID) || ''
@@ -78,7 +115,9 @@ export function ensureLoggedInOrPrompt(options) {
 	const title = (options && options.title) || '需要登录'
 	const content =
 		(options && options.content) || '使用对比与报告功能前请先完成微信登录。'
+	const returnUrl = (options && options.returnUrl) || buildCurrentPageUrl()
 	return new Promise((resolve) => {
+		uni.setStorageSync(STORAGE_LOGIN_RETURN_URL, returnUrl)
 		uni.showModal({
 			title,
 			content,

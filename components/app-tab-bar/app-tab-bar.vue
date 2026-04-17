@@ -53,14 +53,18 @@ async function switchTab(url) {
 	const cur = pages[pages.length - 1]?.route || ''
 	if (cur === url) return
 	if (url === 'pages/mine/mine' && !getStoredOpenid()) {
-		uni.navigateTo({ url: '/pages/login/login' })
-		return
+		const ok = await ensureLoggedInOrPrompt({
+			content: '使用个人中心请先完成微信登录。',
+			returnUrl: '/' + url
+		})
+		if (!ok) return
 	}
 	if (url === 'pages/index/index' && !getStoredOpenid()) {
-		await ensureLoggedInOrPrompt({
-			content: '进入计算对比页并使用相关功能前，请先完成微信登录。'
+		const ok = await ensureLoggedInOrPrompt({
+			content: '进入计算对比页并使用相关功能前，请先完成微信登录。',
+			returnUrl: '/' + url
 		})
-		return
+		if (!ok) return
 	}
 	uni.redirectTo({ url: '/' + url })
 }

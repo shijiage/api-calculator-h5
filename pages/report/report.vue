@@ -47,8 +47,11 @@ import AppTabBar from '@/components/app-tab-bar/app-tab-bar.vue'
 import { reportPageData } from '@/common/data.js'
 import { REPORT_STORAGE_KEY } from '@/common/calculator.js'
 import { getReportSnapshotById, getReportSnapshotByIdAsync } from '@/common/report-history.js'
+	import { trackFunnelEvent } from '@/common/analytics.js'
 
 const statusBarH = ref(20)
+
+const reportId = ref('')
 
 function cloneReportDefaults() {
 	return JSON.parse(JSON.stringify(reportPageData))
@@ -97,6 +100,7 @@ async function loadReportFromPageOptions() {
 	const cur = pages[pages.length - 1]
 	const id = cur && cur.options && cur.options.id ? String(cur.options.id) : ''
 	if (!id) return false
+	reportId.value = id
 	let snap = getReportSnapshotById(id)
 	if (!snap) snap = await getReportSnapshotByIdAsync(id)
 	if (!snap) return false
@@ -140,6 +144,13 @@ function buildSharePayload() {
 	const title = reportRef.value?.hero?.title
 		? `${reportRef.value.hero.title}｜性价比助手`
 		: '我做了一份 API 性价比对比报告，来看看'
+	const id = reportId.value ? String(reportId.value) : ''
+	if (id) {
+		return {
+			title,
+			path: '/pages/report/report?id=' + encodeURIComponent(id)
+		}
+	}
 	return {
 		title,
 		path: '/pages/index/index?from=share_report'
@@ -147,7 +158,7 @@ function buildSharePayload() {
 }
 
 function onTapShare() {
-	// 占位：需要时可在此增加独立分享埋点
+	trackFunnelEvent('tap_share_report')
 }
 
 onShareAppMessage(() => buildSharePayload())
