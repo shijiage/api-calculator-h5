@@ -3,6 +3,7 @@ import { markLoginSuccess } from '@/common/analytics.js'
 
 const STORAGE_OPENID = 'calc_openid'
 const STORAGE_USER_COUNT = 'calc_user_count'
+const STORAGE_IS_ADMIN = 'calc_is_admin'
 const STORAGE_LOGIN_AT = 'calc_login_at'
 const STORAGE_LOGIN_RETURN_URL = 'calc_login_return_url'
 
@@ -51,17 +52,27 @@ export function getStoredUserCount() {
 	return typeof n === 'number' ? n : parseInt(String(n), 10) || 0
 }
 
+export function getStoredIsAdmin() {
+	try {
+		const raw = uni.getStorageSync(STORAGE_IS_ADMIN)
+		return raw === true || raw === 1 || raw === '1'
+	} catch {
+		return false
+	}
+}
+
 export function clearLogin() {
 	try {
 		uni.removeStorageSync(STORAGE_OPENID)
 		uni.removeStorageSync(STORAGE_USER_COUNT)
+		uni.removeStorageSync(STORAGE_IS_ADMIN)
 		uni.removeStorageSync(STORAGE_LOGIN_AT)
 	} catch (e) {}
 }
 
 /**
  * 微信小程序静默登录：uni.login → 云函数 login-by-wx
- * @returns {{ openid: string, userCount: number, isNew: boolean }}
+ * @returns {{ openid: string, userCount: number, isNew: boolean, isAdmin: boolean }}
  */
 export async function loginByWxCloud() {
 	const loginRes = await uni.login({ provider: 'weixin' })
@@ -96,13 +107,15 @@ export async function loginByWxCloud() {
 
 	uni.setStorageSync(STORAGE_OPENID, payload.openid)
 	uni.setStorageSync(STORAGE_USER_COUNT, payload.userCount || 0)
+	uni.setStorageSync(STORAGE_IS_ADMIN, payload.isAdmin ? 1 : 0)
 	uni.setStorageSync(STORAGE_LOGIN_AT, Date.now())
 	markLoginSuccess()
 
 	return {
 		openid: payload.openid,
 		userCount: payload.userCount || 0,
-		isNew: !!payload.isNew
+		isNew: !!payload.isNew,
+		isAdmin: !!payload.isAdmin
 	}
 }
 

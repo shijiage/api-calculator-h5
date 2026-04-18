@@ -17,6 +17,20 @@
 			}
 		},
 		{
+			"path": "pages/agreement/service",
+			"style": {
+				"navigationBarTitleText": "用户服务协议",
+				"backgroundColor": "#F7F8FA"
+			}
+		},
+		{
+			"path": "pages/agreement/privacy",
+			"style": {
+				"navigationBarTitleText": "隐私政策",
+				"backgroundColor": "#F7F8FA"
+			}
+		},
+		{
 			"path": "pages/records/records",
 			"style": {
 				"navigationStyle": "custom",
@@ -42,6 +56,14 @@
 		},
 		{
 			"path": "pages/test-cases/test-cases",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F3F5F9"
+			}
+		},
+		{
+			"path": "pages/recommend/recommend",
 			"style": {
 				"navigationStyle": "custom",
 				"navigationBarTitleText": "",

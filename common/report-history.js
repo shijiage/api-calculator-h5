@@ -44,6 +44,19 @@ export function getReportHistoryList() {
 	}
 }
 
+export function clearReportHistoryLocal() {
+	const list = getReportHistoryList()
+	for (const item of list) {
+		if (!item || !item.id) continue
+		try {
+			uni.removeStorageSync(SNAPSHOT_PREFIX + item.id)
+		} catch (e) {}
+	}
+	try {
+		uni.removeStorageSync(LIST_KEY)
+	} catch (e) {}
+}
+
 /** 用合并后的候选列表覆盖列表键，并删除不再保留的快照 */
 function replaceReportList(candidate) {
 	const next = candidate.slice(0, MAX_ITEMS)

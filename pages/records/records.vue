@@ -183,8 +183,10 @@ onShow(async () => {
 		} finally {
 			hideLoading()
 		}
+		list.value = getReportHistoryList()
+	} else {
+		list.value = []
 	}
-	list.value = getReportHistoryList()
 	trackFunnelEvent('view_records')
 })
 
@@ -277,7 +279,6 @@ async function onRestoreCompare(item) {
 }
 
 async function goCalc() {
-	if (!(await ensureLoggedInOrPrompt({ content: '使用对比功能请先完成微信登录。' }))) return
 	uni.redirectTo({ url: '/pages/index/index' })
 }
 

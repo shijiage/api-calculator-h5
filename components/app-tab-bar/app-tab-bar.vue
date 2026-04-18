@@ -37,8 +37,9 @@ const safeBottom = ref(0)
 
 const tabs = [
 	{ key: 'calc', label: '计算', path: 'pages/index/index', icon: 'list' },
-	{ key: 'testCases', label: '案例', path: 'pages/test-cases/test-cases', icon: 'compose' },
+	{ key: 'recommend', label: '推荐', path: 'pages/recommend/recommend', icon: 'star' },
 	{ key: 'records', label: '记录', path: 'pages/records/records', icon: 'bars' },
+	{ key: 'testCases', label: '案例', path: 'pages/test-cases/test-cases', icon: 'compose' },
 	{ key: 'mine', label: '我的', path: 'pages/mine/mine', icon: 'person' }
 ]
 
@@ -52,6 +53,7 @@ async function switchTab(url) {
 	const pages = getCurrentPages()
 	const cur = pages[pages.length - 1]?.route || ''
 	if (cur === url) return
+
 	if (url === 'pages/mine/mine' && !getStoredOpenid()) {
 		const ok = await ensureLoggedInOrPrompt({
 			content: '使用个人中心请先完成微信登录。',
@@ -59,13 +61,7 @@ async function switchTab(url) {
 		})
 		if (!ok) return
 	}
-	if (url === 'pages/index/index' && !getStoredOpenid()) {
-		const ok = await ensureLoggedInOrPrompt({
-			content: '进入计算对比页并使用相关功能前，请先完成微信登录。',
-			returnUrl: '/' + url
-		})
-		if (!ok) return
-	}
+
 	uni.redirectTo({ url: '/' + url })
 }
 </script>

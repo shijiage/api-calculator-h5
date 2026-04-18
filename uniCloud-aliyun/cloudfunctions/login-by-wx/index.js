@@ -109,19 +109,23 @@ exports.main = async (event) => {
 	const users = db.collection(USERS)
 	const now = Date.now()
 	let isNew = false
+	let isAdmin = false
 
 	try {
 		const got = await users.doc(openid).get()
-		const exists = got.data && (Array.isArray(got.data) ? got.data.length > 0 : got.data._id)
+		const doc = got.data && (Array.isArray(got.data) ? got.data[0] : got.data)
+		const exists = !!(doc && (doc._id || doc.openid))
 		if (!exists) {
 			isNew = true
 			await users.doc(openid).set({
 				openid,
 				unionid: unionid || '',
+				isAdmin: false,
 				create_date: now,
 				last_login: now
 			})
 		} else {
+			isAdmin = !!doc.isAdmin
 			const patch = { last_login: now }
 			if (unionid) patch.unionid = unionid
 			await users.doc(openid).update(patch)
@@ -154,6 +158,7 @@ exports.main = async (event) => {
 		errCode: 0,
 		openid,
 		isNew,
-		userCount
+		userCount,
+		isAdmin
 	}
 }

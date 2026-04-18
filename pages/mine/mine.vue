@@ -23,6 +23,28 @@
 
 			<mine-menu-groups :groups="mineMenuGroups" @select="onMenu" />
 
+			<view
+				v-if="isAdmin"
+				class="admin-sync"
+				:class="{ 'admin-sync--disabled': syncingRecommend }"
+				hover-class="admin-sync--hover"
+				@click="onRecommendSync"
+			>
+				<uni-icons type="loop" size="32rpx" color="#ffffff" />
+				<text class="admin-sync__text">{{ syncingRecommend ? '同步中...' : '后台同步推荐数据' }}</text>
+			</view>
+
+			<view
+				v-if="isAdmin"
+				class="admin-dedupe"
+				:class="{ 'admin-dedupe--disabled': dedupingRecommend }"
+				hover-class="admin-dedupe--hover"
+				@click="onRecommendDedupe"
+			>
+				<uni-icons type="trash" size="32rpx" color="#ffffff" />
+				<text class="admin-dedupe__text">{{ dedupingRecommend ? '去重中...' : '数据库去重' }}</text>
+			</view>
+
 			<view class="logout" hover-class="logout--hover" @click="onLogout">
 				<uni-icons type="undo" size="32rpx" color="#6b7288" />
 				<text class="logout__text">退出登录</text>
@@ -43,11 +65,12 @@ import MineUserProfile from '@/components/mine-user-profile/mine-user-profile.vu
 import MineStatsCards from '@/components/mine-stats-cards/mine-stats-cards.vue'
 import MineMenuGroups from '@/components/mine-menu-groups/mine-menu-groups.vue'
 import AppTabBar from '@/components/app-tab-bar/app-tab-bar.vue'
-import { getStoredOpenid, getStoredUserCount, clearLogin } from '@/common/auth.js'
-import { getReportHistoryList, syncReportHistoryFromCloud } from '@/common/report-history.js'
+import { getStoredOpenid, getStoredUserCount, getStoredIsAdmin, clearLogin } from '@/common/auth.js'
+import { getReportHistoryList, syncReportHistoryFromCloud, clearReportHistoryLocal } from '@/common/report-history.js'
 import { getCaseFavoriteCount } from '@/common/case-favorites.js'
 import { runEnvSelfCheck, formatEnvSelfCheckText } from '@/common/env-health.js'
 import { getUserSegment, getGrowthSnapshot } from '@/common/analytics.js'
+import { syncRecommendFromHvoy, dedupeRecommendData } from '@/common/recommend-data.js'
 import {
 	minePageDefaults,
 	mineMenuGroups,
@@ -63,6 +86,9 @@ const nicknameDisplay = ref(minePageDefaults.nickname)
 const userCount = ref(0)
 const historyCount = ref(0)
 const favoritesCount = ref(0)
+const isAdmin = ref(false)
+const syncingRecommend = ref(false)
+const dedupingRecommend = ref(false)
 
 function showLoading(title) {
 	uni.showLoading({ title: title || '加载中', mask: true })
@@ -90,6 +116,7 @@ function readNicknameFromStorage() {
 
 onShow(async () => {
 	userCount.value = getStoredUserCount()
+	isAdmin.value = getStoredIsAdmin()
 	if (getStoredOpenid()) {
 		showLoading('同步中')
 		try {
@@ -112,6 +139,11 @@ onShow(async () => {
 	if (openid && !avatarUrl.value) {
 		try {
 			await loadAvatarFromCloud(openid)
+		} catch (e) {}
+	}
+	if (openid) {
+		try {
+			await loadUserProfile(openid)
 		} catch (e) {}
 	}
 	readNicknameFromStorage()
@@ -205,13 +237,37 @@ async function onAvatarChange(url) {
 	}
 }
 
-function onNicknameChange(name) {
+async function onNicknameChange(name) {
 	const t = String(name || '').trim()
 	try {
 		if (t) uni.setStorageSync(MINE_DISPLAY_NICKNAME_STORAGE_KEY, t)
 		else uni.removeStorageSync(MINE_DISPLAY_NICKNAME_STORAGE_KEY)
 	} catch (e) {}
 	readNicknameFromStorage()
+
+	const openid = getStoredOpenid()
+	if (!openid || !t) return
+
+	try {
+		const res = await uniCloud.callFunction({
+			name: 'user-profile',
+			data: { action: 'set-nickname', openid, nickname: t },
+			timeout: CLOUD_CALL_TIMEOUT_MS
+		})
+		const payload = res && res.result ? res.result : null
+		if (!payload || payload.errCode !== 0) {
+			uni.showToast({ title: (payload && payload.errMsg) || '昵称保存失败', icon: 'none' })
+			return
+		}
+		if (payload.nickname) {
+			nicknameDisplay.value = String(payload.nickname)
+			try {
+				uni.setStorageSync(MINE_DISPLAY_NICKNAME_STORAGE_KEY, String(payload.nickname))
+			} catch (e) {}
+		}
+	} catch (e) {
+		uni.showToast({ title: e?.message || '昵称保存失败', icon: 'none' })
+	}
 }
 
 const uidDisplay = computed(() => {
@@ -225,7 +281,7 @@ async function fileIDToTempURL(fileID) {
 	if (!fileID) return ''
 	// 不同端/版本的 uniCloud 可能方法名不同，这里做兜底
 	if (!uniCloud || typeof uniCloud.getTempFileURL !== 'function') return ''
-	const r = await uniCloud.getTempFileURL({ fileList: [{ fileID }] })
+	const r = await uniCloud.getTempFileURL({ fileList: [String(fileID)] })
 	const url = r && r.fileList && r.fileList[0] ? r.fileList[0].tempFileURL : ''
 	return url ? String(url) : ''
 }
@@ -246,6 +302,37 @@ async function loadAvatarFromCloud(openid) {
 	try {
 		uni.setStorageSync(MINE_WX_AVATAR_STORAGE_KEY, tempUrl)
 	} catch (e) {}
+}
+
+async function loadUserProfile(openid) {
+	if (!openid) return
+	const res = await uniCloud.callFunction({
+		name: 'user-profile',
+		data: { action: 'get-profile', openid },
+		timeout: CLOUD_CALL_TIMEOUT_MS
+	})
+	const payload = res && res.result ? res.result : null
+	if (!payload || payload.errCode !== 0) return
+	isAdmin.value = !!payload.isAdmin
+	try {
+		uni.setStorageSync('calc_is_admin', payload.isAdmin ? 1 : 0)
+	} catch (e) {}
+	const cloudNickname = String(payload.nickname || '').trim()
+	if (cloudNickname) {
+		nicknameDisplay.value = cloudNickname
+		try {
+			uni.setStorageSync(MINE_DISPLAY_NICKNAME_STORAGE_KEY, cloudNickname)
+		} catch (e) {}
+	}
+	if (!avatarUrl.value && payload.fileID) {
+		const tempUrl = await fileIDToTempURL(String(payload.fileID))
+		if (tempUrl) {
+			avatarUrl.value = tempUrl
+			try {
+				uni.setStorageSync(MINE_WX_AVATAR_STORAGE_KEY, tempUrl)
+			} catch (e) {}
+		}
+	}
 }
 
 const historyTrendTag = computed(() => {
@@ -332,6 +419,7 @@ function onLogout() {
 		success(res) {
 			if (!res.confirm) return
 			clearLogin()
+			clearReportHistoryLocal()
 			try {
 				uni.removeStorageSync(MINE_WX_AVATAR_STORAGE_KEY)
 				uni.removeStorageSync(MINE_DISPLAY_NICKNAME_STORAGE_KEY)
@@ -341,6 +429,59 @@ function onLogout() {
 			uni.reLaunch({ url: '/pages/login/login' })
 		}
 	})
+}
+
+async function onRecommendSync() {
+	if (!isAdmin.value || syncingRecommend.value) return
+	const openid = getStoredOpenid()
+	if (!openid) {
+		uni.showToast({ title: '请先登录', icon: 'none' })
+		return
+	}
+	syncingRecommend.value = true
+	showLoading('同步中')
+	try {
+		const result = await syncRecommendFromHvoy(openid)
+		const extra = result.usedFallback ? '\n当前使用本地快照兜底同步。' : ''
+		uni.showModal({
+			title: '同步完成',
+			content:
+				`已同步 ${result.synced || 0} 条数据，可展示 ${result.enabled || 0} 条推荐。` +
+				`\n新增 ${result.inserted || 0} 条，更新 ${result.updated || 0} 条，未变 ${result.unchanged || 0} 条。` +
+				`\n失效 ${result.disabled || 0} 条，清理库内重复 ${result.removedDuplicates || 0} 条，跳过源内重复 ${result.skippedDuplicates || 0} 条。` +
+				`${extra}`,
+			showCancel: false
+		})
+	} catch (e) {
+		uni.showToast({ title: e?.message || '同步失败', icon: 'none' })
+	} finally {
+		hideLoading()
+		syncingRecommend.value = false
+	}
+}
+
+async function onRecommendDedupe() {
+	if (!isAdmin.value || dedupingRecommend.value) return
+	const openid = getStoredOpenid()
+	if (!openid) {
+		uni.showToast({ title: '请先登录', icon: 'none' })
+		return
+	}
+	dedupingRecommend.value = true
+	showLoading('去重中')
+	try {
+		const result = await dedupeRecommendData(openid)
+		uni.showModal({
+			title: '去重完成',
+			content: `共扫描 ${result.total || 0} 条，保留 ${result.unique || 0} 条，删除重复 ${result.removedDuplicates || 0} 条，修复键值 ${result.repaired || 0} 条。`,
+			showCancel: false
+		})
+	} catch (e) {
+		uni.showToast({ title: e?.message || '数据库去重失败', icon: 'none' })
+	} finally {
+		hideLoading()
+		dedupingRecommend.value = false
+	}
 }
 </script>
 
@@ -386,6 +527,60 @@ function onLogout() {
 	font-size: 30rpx;
 	font-weight: 600;
 	color: #6b7288;
+}
+
+.admin-sync {
+	margin: 0 8rpx 24rpx;
+	height: 96rpx;
+	border-radius: 20rpx;
+	background: #1a4a9e;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 10rpx 28rpx rgba(26, 74, 158, 0.24);
+}
+
+.admin-sync--hover {
+	opacity: 0.92;
+}
+
+.admin-sync--disabled {
+	opacity: 0.7;
+}
+
+.admin-sync__text {
+	margin-left: 12rpx;
+	font-size: 30rpx;
+	font-weight: 700;
+	color: #ffffff;
+}
+
+.admin-dedupe {
+	margin: 0 8rpx 24rpx;
+	height: 96rpx;
+	border-radius: 20rpx;
+	background: #12805c;
+	display: flex;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+	box-shadow: 0 10rpx 28rpx rgba(18, 128, 92, 0.2);
+}
+
+.admin-dedupe--hover {
+	opacity: 0.92;
+}
+
+.admin-dedupe--disabled {
+	opacity: 0.7;
+}
+
+.admin-dedupe__text {
+	margin-left: 12rpx;
+	font-size: 30rpx;
+	font-weight: 700;
+	color: #ffffff;
 }
 
 .foot-pad {

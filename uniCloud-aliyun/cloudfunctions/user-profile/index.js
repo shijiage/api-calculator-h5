@@ -1,13 +1,20 @@
 'use strict'
 
 /**
- * 用户资料（头像）：
+ * 用户资料（头像、昵称）：
  * - get-avatar: 读取 calc_users.avatar_fileid
+ * - get-profile: 读取头像、昵称、管理员状态
+ * - set-nickname: 写入昵称
  * - set-avatar: 下载微信头像 URL -> 上传 uniCloud 云存储 -> 写回 avatar_fileid
  */
 
 const db = uniCloud.database()
 const USERS = 'calc_users'
+
+function unwrapDoc(data) {
+	if (!data) return null
+	return Array.isArray(data) ? data[0] || null : data
+}
 
 function getFirstHeader(headers, key) {
 	if (!headers) return ''
@@ -36,7 +43,7 @@ function guessExtByContentType(contentType) {
 }
 
 exports.main = async (event) => {
-	const { action, openid, avatarUrl } = event || {}
+	const { action, openid, avatarUrl, nickname } = event || {}
 
 	if (action === 'health') {
 		return { errCode: 0, service: 'user-profile', ok: true, serverTime: Date.now() }
@@ -51,12 +58,54 @@ exports.main = async (event) => {
 	if (action === 'get-avatar') {
 		try {
 			const got = await coll.doc(openid).get()
-			const doc = got && got.data ? got.data : null
+			const doc = unwrapDoc(got && got.data)
 			const fileID = doc && doc.avatar_fileid ? String(doc.avatar_fileid) : ''
 			return { errCode: 0, fileID }
 		} catch (e) {
 			return { errCode: 'DB_ERROR', errMsg: e.message || 'get-avatar failed' }
 		}
+	}
+
+	if (action === 'get-profile') {
+		try {
+			const got = await coll.doc(openid).get()
+			const doc = unwrapDoc(got && got.data)
+			return {
+				errCode: 0,
+				fileID: doc && doc.avatar_fileid ? String(doc.avatar_fileid) : '',
+				nickname: doc && doc.nickname ? String(doc.nickname) : '',
+				isAdmin: !!(doc && doc.isAdmin)
+			}
+		} catch (e) {
+			return { errCode: 'DB_ERROR', errMsg: e.message || 'get-profile failed' }
+		}
+	}
+
+	if (action === 'set-nickname') {
+		const cleanName = String(nickname || '').trim().slice(0, 32)
+		if (!cleanName) {
+			return { errCode: 'INVALID_PARAM', errMsg: 'missing nickname' }
+		}
+
+		try {
+			await coll.doc(openid).update({
+				nickname: cleanName,
+				nickname_updated_at: Date.now()
+			})
+		} catch (e) {
+			try {
+				await coll.doc(openid).set({
+					openid,
+					isAdmin: false,
+					nickname: cleanName,
+					nickname_updated_at: Date.now()
+				})
+			} catch (e2) {
+				return { errCode: 'DB_ERROR', errMsg: e2.message || 'write nickname failed' }
+			}
+		}
+
+		return { errCode: 0, nickname: cleanName }
 	}
 
 	if (action === 'set-avatar-fileid') {
@@ -75,6 +124,7 @@ exports.main = async (event) => {
 			try {
 				await coll.doc(openid).set({
 					openid,
+					isAdmin: false,
 					avatar_fileid: String(fileID),
 					avatar_updated_at: Date.now()
 				})
@@ -147,6 +197,7 @@ exports.main = async (event) => {
 			try {
 				await coll.doc(openid).set({
 					openid,
+					isAdmin: false,
 					avatar_fileid: fileID,
 					avatar_updated_at: Date.now()
 				})

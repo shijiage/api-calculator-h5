@@ -1,0 +1,10 @@
+{
+	"name": "recommend-data",
+	"version": "1.0.0",
+	"description": "recommend page cloud function",
+	"main": "index.js",
+	"cloudfunction-config": {
+		"memorySize": 256,
+		"timeout": 60
+	}
+}

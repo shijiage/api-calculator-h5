@@ -1,0 +1,173 @@
+{
+	"bsonType": "object",
+	"required": [
+		"enabled",
+		"source",
+		"section_key",
+		"section_title",
+		"section_sort",
+		"site_name",
+		"model_key",
+		"channel",
+		"group",
+		"price",
+		"latency",
+		"online_rate",
+		"mix_rate",
+		"status_text",
+		"status_type",
+		"sort"
+	],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"enabled": {
+			"bsonType": "bool",
+			"description": "Whether this row is visible in recommendations"
+		},
+		"source": {
+			"bsonType": "string",
+			"description": "Source name, for example hvoy"
+		},
+		"record_key": {
+			"bsonType": "string",
+			"description": "Stable dedupe key built from source, model, channel, domain and name"
+		},
+		"section_key": {
+			"bsonType": "string",
+			"description": "Section key, for example opus-47"
+		},
+		"section_title": {
+			"bsonType": "string",
+			"description": "Section title shown in UI"
+		},
+		"section_sort": {
+			"bsonType": "int",
+			"description": "Section order, lower comes first"
+		},
+		"site_name": {
+			"bsonType": "string",
+			"description": "Provider display name"
+		},
+		"model_label": {
+			"bsonType": "string",
+			"description": "Model label shown in UI"
+		},
+		"model_key": {
+			"bsonType": "string",
+			"description": "Source model key"
+		},
+		"site_domain": {
+			"bsonType": "string",
+			"description": "Site domain if available"
+		},
+		"site_url": {
+			"bsonType": "string",
+			"description": "Registration or landing URL"
+		},
+		"channel": {
+			"bsonType": "string",
+			"description": "Source channel or group"
+		},
+		"badge": {
+			"bsonType": "string",
+			"description": "Small badge text"
+		},
+		"group": {
+			"bsonType": "string",
+			"description": "Display group"
+		},
+		"price": {
+			"bsonType": "string",
+			"description": "Formatted price text"
+		},
+		"latency": {
+			"bsonType": "string",
+			"description": "Formatted latency text"
+		},
+		"online_rate": {
+			"bsonType": "string",
+			"description": "Formatted online rate text"
+		},
+		"mix_rate": {
+			"bsonType": "string",
+			"description": "Formatted mix rate text"
+		},
+		"status_text": {
+			"bsonType": "string",
+			"description": "Status text"
+		},
+		"status_type": {
+			"bsonType": "string",
+			"description": "Status type: excellent | good | normal"
+		},
+		"sort": {
+			"bsonType": "int",
+			"description": "Order inside section, lower comes first"
+		},
+		"default_ranking": {
+			"bsonType": "int",
+			"description": "Default ranking from source"
+		},
+		"pass_rate": {
+			"bsonType": "double",
+			"description": "Pass rate percent"
+		},
+		"fail_rate": {
+			"bsonType": "double",
+			"description": "Fail rate percent"
+		},
+		"online_rate_num": {
+			"bsonType": "double",
+			"description": "Online rate numeric percent"
+		},
+		"avg_latency_s": {
+			"bsonType": "double",
+			"description": "Average latency in seconds"
+		},
+		"latest_input_price_cny": {
+			"bsonType": "double",
+			"description": "Latest input price in CNY"
+		},
+		"sample_count": {
+			"bsonType": "int",
+			"description": "Sample count"
+		},
+		"weighted_score": {
+			"bsonType": "double",
+			"description": "Weighted score"
+		},
+		"last_result": {
+			"bsonType": "string",
+			"description": "Latest result: pass | fail | error"
+		},
+		"source_updated_at": {
+			"bsonType": "long",
+			"description": "Source updated timestamp in milliseconds"
+		},
+		"updated_at": {
+			"bsonType": "long",
+			"description": "Last changed timestamp in milliseconds"
+		},
+		"created_at": {
+			"bsonType": "long",
+			"description": "First inserted timestamp in milliseconds"
+		},
+		"last_seen_at": {
+			"bsonType": "long",
+			"description": "Last time this record appeared in source data"
+		},
+		"sync_count": {
+			"bsonType": "int",
+			"description": "How many sync runs matched this record"
+		},
+		"sync_state": {
+			"bsonType": "string",
+			"description": "Sync state: active | inactive"
+		}
+	}
+}
