@@ -8,9 +8,12 @@
 			<text class="nav__title">登录</text>
 			<view class="nav__side nav__side--placeholder" />
 		</view>
+
 		<view class="panel">
 			<text class="title">性价比助手</text>
-			<text class="desc">可先浏览页面；使用对比、报告和云端同步前，请先完成微信登录。</text>
+			<text class="desc">
+				可先浏览页面；使用对比、报告和云端同步前，请先完成账号登录。
+			</text>
 
 			<view v-if="error" class="err">{{ error }}</view>
 
@@ -30,30 +33,135 @@
 				</view>
 			</view>
 
+			<!-- #ifdef MP-WEIXIN -->
 			<button
 				class="btn"
 				type="primary"
 				:loading="loading"
 				:disabled="loading || !agreed"
-				@click="onLogin"
+				@click="onWxLogin"
 			>
 				微信一键登录
 			</button>
 
-			<text class="hint">登录仅用于身份识别、个人资料同步与匿名使用统计，不采集手机号等敏感信息。</text>
+			<text class="hint">
+				登录仅用于身份识别、个人资料同步与匿名使用统计，不采集手机号等敏感信息。
+			</text>
+			<!-- #endif -->
+
+			<!-- #ifdef H5 -->
+			<view class="mode-tabs">
+				<view
+					class="mode-tab"
+					:class="{ 'mode-tab--active': mode === 'login' }"
+					@click="switchMode('login')"
+				>
+					<text class="mode-tab__text" :class="{ 'mode-tab__text--active': mode === 'login' }">账号登录</text>
+				</view>
+				<view
+					class="mode-tab"
+					:class="{ 'mode-tab--active': mode === 'register' }"
+					@click="switchMode('register')"
+				>
+					<text class="mode-tab__text" :class="{ 'mode-tab__text--active': mode === 'register' }">注册账号</text>
+				</view>
+			</view>
+
+			<view class="form-card">
+				<input
+					v-model.trim="form.username"
+					class="input"
+					maxlength="24"
+					placeholder="请输入账号，4-24 位字母/数字/下划线"
+					placeholder-class="input__placeholder"
+				/>
+				<input
+					v-model="form.password"
+					class="input"
+					password
+					maxlength="64"
+					placeholder="请输入密码，至少 6 位"
+					placeholder-class="input__placeholder"
+				/>
+
+				<template v-if="mode === 'register'">
+					<input
+						v-model="form.confirmPassword"
+						class="input"
+						password
+						maxlength="64"
+						placeholder="请再次输入密码"
+						placeholder-class="input__placeholder"
+					/>
+
+					<view class="captcha-row">
+						<input
+							v-model.trim="form.captchaInput"
+							class="input input--captcha"
+							maxlength="4"
+							placeholder="请输入验证码"
+							placeholder-class="input__placeholder"
+						/>
+						<view class="captcha-box" hover-class="captcha-box--hover" @click="refreshCaptcha">
+							<text
+								v-for="(char, index) in captchaChars"
+								:key="`${char}-${index}-${captchaSeed}`"
+								class="captcha-box__char"
+								:style="captchaCharStyle(index)"
+							>
+								{{ char }}
+							</text>
+						</view>
+					</view>
+					<text class="captcha-tip">点击验证码可刷新，注册时需通过人机校验。</text>
+				</template>
+			</view>
+
+			<button
+				class="btn"
+				type="primary"
+				:loading="loading"
+				:disabled="loading || !agreed"
+				@click="onWebSubmit"
+			>
+				{{ mode === 'login' ? '登录账号' : '注册并登录' }}
+			</button>
+
+			<text class="hint">
+				网页端不走微信小程序登录，已切换为账号注册/登录模式。
+			</text>
+			<!-- #endif -->
 		</view>
 	</view>
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { loginByWxCloud, hasStoredSession, getStoredLoginReturnUrl, clearLoginReturnUrl } from '@/common/auth.js'
+import {
+	loginByWxCloud,
+	loginByWebAccount,
+	registerByWebAccount,
+	hasStoredSession,
+	getStoredLoginReturnUrl,
+	clearLoginReturnUrl
+} from '@/common/auth.js'
 
 const statusBarH = ref(20)
 const loading = ref(false)
 const error = ref('')
 const agreed = ref(false)
+const mode = ref('login')
+const captchaCode = ref('')
+const captchaSeed = ref(0)
+const form = ref({
+	username: '',
+	password: '',
+	confirmPassword: '',
+	captchaInput: ''
+})
+
+const captchaChars = computed(() => captchaCode.value.split(''))
 
 function goHomeIfLogged() {
 	if (hasStoredSession()) {
@@ -61,9 +169,30 @@ function goHomeIfLogged() {
 	}
 }
 
+function refreshCaptcha() {
+	const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+	let next = ''
+	for (let i = 0; i < 4; i += 1) {
+		next += chars.charAt(Math.floor(Math.random() * chars.length))
+	}
+	captchaCode.value = next
+	captchaSeed.value = Date.now()
+	form.value.captchaInput = ''
+}
+
+function captchaCharStyle(index) {
+	const base = Number(captchaSeed.value || 0) + index * 97
+	const rotate = ((base % 31) - 15).toFixed(0)
+	const offset = ((base % 7) - 3).toFixed(0)
+	return {
+		transform: `translateY(${offset}px) rotate(${rotate}deg)`
+	}
+}
+
 onMounted(() => {
 	const sys = uni.getSystemInfoSync()
 	statusBarH.value = sys.statusBarHeight || 20
+	refreshCaptcha()
 	goHomeIfLogged()
 })
 
@@ -76,8 +205,7 @@ function toggleAgree() {
 }
 
 function openAgreement(type) {
-	const url =
-		type === 'privacy' ? '/pages/agreement/privacy' : '/pages/agreement/service'
+	const url = type === 'privacy' ? '/pages/agreement/privacy' : '/pages/agreement/service'
 	uni.navigateTo({ url })
 }
 
@@ -90,7 +218,52 @@ function onBack() {
 	uni.reLaunch({ url: '/pages/index/index' })
 }
 
-async function onLogin() {
+function switchMode(nextMode) {
+	if (loading.value || mode.value === nextMode) return
+	mode.value = nextMode
+	error.value = ''
+	form.value.password = ''
+	form.value.confirmPassword = ''
+	form.value.captchaInput = ''
+	refreshCaptcha()
+}
+
+function validateUsername(username) {
+	return /^[a-zA-Z][a-zA-Z0-9_]{3,23}$/.test(username)
+}
+
+function validateWebForm() {
+	const username = String(form.value.username || '').trim()
+	const password = String(form.value.password || '')
+
+	if (!validateUsername(username)) {
+		throw new Error('账号需为 4-24 位，以字母开头，可使用字母、数字和下划线')
+	}
+
+	if (password.length < 6 || password.length > 64) {
+		throw new Error('密码长度需为 6-64 位')
+	}
+
+	if (mode.value === 'register') {
+		if (password !== String(form.value.confirmPassword || '')) {
+			throw new Error('两次输入的密码不一致')
+		}
+		if (String(form.value.captchaInput || '').trim().toUpperCase() !== captchaCode.value) {
+			refreshCaptcha()
+			throw new Error('验证码错误，请重新输入')
+		}
+	}
+
+	return { username, password }
+}
+
+function finishLogin() {
+	const next = getStoredLoginReturnUrl()
+	clearLoginReturnUrl()
+	uni.reLaunch({ url: next || '/pages/index/index' })
+}
+
+async function onWxLogin() {
 	if (!agreed.value) {
 		uni.showToast({ title: '请先阅读并勾选协议', icon: 'none' })
 		return
@@ -104,13 +277,37 @@ async function onLogin() {
 			title: isNew ? `欢迎，你是第 ${userCount} 位用户` : '欢迎回来',
 			icon: 'none'
 		})
-		setTimeout(() => {
-			const next = getStoredLoginReturnUrl()
-			clearLoginReturnUrl()
-			uni.reLaunch({ url: next || '/pages/index/index' })
-		}, 400)
+		setTimeout(finishLogin, 400)
 	} catch (e) {
 		error.value = e.message || '登录失败，请检查网络与 uniCloud 配置'
+	} finally {
+		loading.value = false
+	}
+}
+
+async function onWebSubmit() {
+	if (!agreed.value) {
+		uni.showToast({ title: '请先阅读并勾选协议', icon: 'none' })
+		return
+	}
+
+	error.value = ''
+	loading.value = true
+	try {
+		const { username, password } = validateWebForm()
+		const payload =
+			mode.value === 'login'
+				? await loginByWebAccount({ username, password })
+				: await registerByWebAccount({ username, password })
+
+		uni.showToast({
+			title: payload.isNew ? '注册成功，已自动登录' : '登录成功',
+			icon: 'success'
+		})
+
+		setTimeout(finishLogin, 350)
+	} catch (e) {
+		error.value = e.message || (mode.value === 'login' ? '账号登录失败' : '账号注册失败')
 	} finally {
 		loading.value = false
 	}
@@ -215,6 +412,118 @@ async function onLogin() {
 .agreement__link {
 	color: #1a4a9e;
 	font-weight: 600;
+}
+
+.mode-tabs {
+	margin-top: 24rpx;
+	display: inline-flex;
+	align-self: center;
+	padding: 10rpx;
+	background: #edf2fb;
+	border-radius: 999rpx;
+	gap: 10rpx;
+}
+
+.mode-tab {
+	min-width: 172rpx;
+	height: 68rpx;
+	padding: 0 28rpx;
+	border-radius: 999rpx;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.mode-tab--active {
+	background: #1a4a9e;
+	box-shadow: 0 12rpx 28rpx rgba(26, 74, 158, 0.2);
+}
+
+.mode-tab__text {
+	font-size: 24rpx;
+	font-weight: 700;
+	color: #6c7380;
+}
+
+.mode-tab__text--active {
+	color: #ffffff;
+}
+
+.form-card {
+	margin-top: 28rpx;
+	padding: 30rpx 28rpx;
+	background: #ffffff;
+	border-radius: 24rpx;
+	box-shadow: 0 18rpx 40rpx rgba(20, 31, 58, 0.06);
+}
+
+.input {
+	height: 88rpx;
+	margin-top: 18rpx;
+	padding: 0 26rpx;
+	border-radius: 18rpx;
+	background: #f5f7fb;
+	font-size: 28rpx;
+	color: #1a1d24;
+	box-sizing: border-box;
+}
+
+.input:first-child {
+	margin-top: 0;
+}
+
+.input__placeholder {
+	color: #9aa0ab;
+}
+
+.captcha-row {
+	margin-top: 18rpx;
+	display: flex;
+	gap: 18rpx;
+	align-items: center;
+}
+
+.input--captcha {
+	flex: 1;
+	margin-top: 0;
+}
+
+.captcha-box {
+	width: 220rpx;
+	height: 88rpx;
+	border-radius: 18rpx;
+	background:
+		linear-gradient(135deg, rgba(26, 74, 158, 0.08) 0%, rgba(26, 74, 158, 0.16) 100%),
+		repeating-linear-gradient(
+			-45deg,
+			rgba(26, 74, 158, 0.06) 0,
+			rgba(26, 74, 158, 0.06) 12rpx,
+			rgba(26, 74, 158, 0.01) 12rpx,
+			rgba(26, 74, 158, 0.01) 24rpx
+		);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8rpx;
+}
+
+.captcha-box--hover {
+	opacity: 0.88;
+}
+
+.captcha-box__char {
+	font-size: 40rpx;
+	font-weight: 800;
+	color: #1a4a9e;
+	letter-spacing: 3rpx;
+}
+
+.captcha-tip {
+	display: block;
+	margin-top: 14rpx;
+	font-size: 22rpx;
+	line-height: 1.6;
+	color: #8b93a3;
 }
 
 .btn {

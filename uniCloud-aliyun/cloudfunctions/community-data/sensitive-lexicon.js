@@ -85,7 +85,66 @@ const COMMUNITY_REVIEW_KEYWORDS = [
 	'低价出售',
 	'出售账号',
 	'售后联系',
-	'售前咨询'
+	'售前咨询',
+	'傻逼',
+	'傻比',
+	'傻b',
+	'煞笔',
+	'沙比',
+	'蠢货',
+	'废物',
+	'弱智',
+	'智障',
+	'脑残',
+	'脑瘫',
+	'垃圾',
+	'死妈',
+	'妈的',
+	'他妈的',
+	'你妈的',
+	'操你妈',
+	'草泥马',
+	'滚蛋',
+	'去死',
+	'贱人',
+	'贱货',
+	'狗东西',
+	'狗杂种',
+	'杂种'
+]
+
+const OPEN_SOURCE_COMMENT_REVIEW_KEYWORDS = [
+	'草你妈',
+	'操你妈',
+	'操你妈屄',
+	'去你妈的',
+	'你妈的',
+	'他妈的',
+	'妳妈的',
+	'它妈的',
+	'妈的',
+	'傻逼',
+	'傻比',
+	'煞笔',
+	'沙比',
+	'大傻逼',
+	'大sb',
+	'sb',
+	'婊子',
+	'婊子养的',
+	'婊子養的',
+	'贱人',
+	'贱货',
+	'王八蛋',
+	'狗日的',
+	'狗东西',
+	'狗杂种',
+	'杂种',
+	'垃圾',
+	'脑残',
+	'弱智',
+	'废物',
+	'去死'
 ]
 
 const COMMUNITY_REJECT_KEYWORDS = [
@@ -184,6 +243,9 @@ const COMMUNITY_REJECT_KEYWORDS = [
 ]
 
 module.exports = {
-	COMMUNITY_REVIEW_KEYWORDS: Array.from(new Set(COMMUNITY_REVIEW_KEYWORDS)),
+	COMMUNITY_REVIEW_KEYWORDS: Array.from(new Set([
+		...COMMUNITY_REVIEW_KEYWORDS,
+		...OPEN_SOURCE_COMMENT_REVIEW_KEYWORDS
+	])),
 	COMMUNITY_REJECT_KEYWORDS: Array.from(new Set(COMMUNITY_REJECT_KEYWORDS))
 }

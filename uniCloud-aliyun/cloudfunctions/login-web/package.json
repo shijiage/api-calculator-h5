@@ -1,0 +1,6 @@
+{
+	"name": "login-web",
+	"version": "1.0.0",
+	"description": "H5 账号注册与登录",
+	"main": "index.js"
+}

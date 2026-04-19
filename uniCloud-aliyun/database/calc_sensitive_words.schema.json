@@ -1,0 +1,66 @@
+{
+	"bsonType": "object",
+	"required": ["source_key", "source_name", "level", "scopes", "words", "enabled", "word_count", "updated_at"],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"source_key": {
+			"bsonType": "string",
+			"description": "敏感词来源唯一标识"
+		},
+		"source_name": {
+			"bsonType": "string",
+			"description": "敏感词来源名称"
+		},
+		"source_type": {
+			"bsonType": "string",
+			"description": "来源类型，例如 project / local-file"
+		},
+		"category": {
+			"bsonType": "string",
+			"description": "词库分类"
+		},
+		"level": {
+			"bsonType": "string",
+			"description": "命中级别：review / reject"
+		},
+		"scopes": {
+			"bsonType": "array",
+			"description": "适用范围：comment / post",
+			"items": {
+				"bsonType": "string"
+			}
+		},
+		"words": {
+			"bsonType": "array",
+			"description": "词条列表",
+			"items": {
+				"bsonType": "string"
+			}
+		},
+		"word_count": {
+			"bsonType": "int",
+			"description": "词条数量"
+		},
+		"enabled": {
+			"bsonType": "bool",
+			"description": "是否启用"
+		},
+		"synced_from": {
+			"bsonType": "string",
+			"description": "同步来源说明"
+		},
+		"last_synced_at": {
+			"bsonType": "long",
+			"description": "最近同步时间戳"
+		},
+		"updated_at": {
+			"bsonType": "long",
+			"description": "更新时间戳"
+		}
+	}
+}

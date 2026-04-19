@@ -149,3 +149,15 @@ export function reviewCommunityAuditItem(options = {}) {
 		reason: String(reason || '')
 	})
 }
+
+export function getCommunitySensitiveWordStats(options = {}) {
+	return callCommunity('getSensitiveWordStats', {
+		...getCommunityAuthPayload(options)
+	})
+}
+
+export function syncCommunitySensitiveWords(options = {}) {
+	return callCommunity('syncSensitiveWords', {
+		...getCommunityAuthPayload(options)
+	})
+}

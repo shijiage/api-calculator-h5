@@ -176,7 +176,14 @@ onShow(async () => {
 	readNicknameFromStorage()
 })
 
-const enableWxAvatar = computed(() => !!getStoredOpenid())
+const enableWxAvatar = computed(() => {
+	// #ifdef MP-WEIXIN
+	return !!getStoredOpenid()
+	// #endif
+	// #ifndef MP-WEIXIN
+	return false
+	// #endif
+})
 
 async function onAvatarChange(url) {
 	if (!url) return

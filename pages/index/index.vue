@@ -44,8 +44,8 @@
 				<text class="accuracy-tip__text">{{ COMPARE_USAGE_ACCURACY_HINT }}</text>
 			</view>
 
-			<view v-if="cloudSyncStatus === 'syncing'" class="syncing">
-				<text class="syncing__text">云端同步中…</text>
+			<view v-if="cloudSyncStatus === 'ok'" class="sync-saved">
+				<text class="sync-saved__text">草稿已自动保存</text>
 			</view>
 
 			<view v-if="cloudSyncStatus === 'failed'" class="sync-fail">
@@ -603,17 +603,17 @@ async function retryCloudPersist() {
 	color: #ffffff;
 }
 
-.syncing {
+.sync-saved {
 	margin: 12rpx 4rpx 0;
-	padding: 16rpx 18rpx;
-	background: #eef2f8;
+	padding: 14rpx 18rpx;
+	background: rgba(238, 242, 248, 0.75);
 	border-radius: 14rpx;
 }
 
-.syncing__text {
-	font-size: 24rpx;
-	color: #5c6370;
-	font-weight: 600;
+.sync-saved__text {
+	font-size: 22rpx;
+	color: #7a8190;
+	font-weight: 500;
 }
 
 .report-validate {

@@ -2,6 +2,7 @@
 
 const crypto = require('crypto')
 const { COMMUNITY_REVIEW_KEYWORDS, COMMUNITY_REJECT_KEYWORDS } = require('./sensitive-lexicon')
+const { SENSITIVE_WORD_SEED_DOCS } = require('./sensitive-word-seeds')
 
 const db = uniCloud.database()
 const dbCmd = db.command
@@ -11,10 +12,12 @@ const COMMENTS = 'calc_community_comments'
 const LIKES = 'calc_community_likes'
 const COPIES = 'calc_community_copies'
 const USERS = 'calc_users'
+const SENSITIVE_WORDS = 'calc_sensitive_words'
 
 const MAX_LIST_LIMIT = 20
 const MAX_COMMENT_LIMIT = 20
 const IN_QUERY_BATCH_SIZE = 50
+const SENSITIVE_WORDS_CACHE_TTL_MS = 5 * 60 * 1000
 
 const AUDIT_STATUS = {
 	PENDING: 'pending',
@@ -28,12 +31,197 @@ const AUTH_EXPIRED_ERROR = {
 	errMsg: '登录状态已失效，请重新登录'
 }
 
-const REVIEW_KEYWORDS = COMMUNITY_REVIEW_KEYWORDS
-const REJECT_KEYWORDS = COMMUNITY_REJECT_KEYWORDS
+const FALLBACK_SENSITIVE_WORD_RULES = {
+	comment: {
+		reviewKeywords: [],
+		rejectKeywords: []
+	},
+	post: {
+		reviewKeywords: [],
+		rejectKeywords: []
+	}
+}
+
+let sensitiveWordCache = {
+	expiresAt: 0,
+	payload: null
+}
+
+function getFallbackSensitiveWordPayload() {
+	return {
+		source: 'fallback',
+		loadedAt: Date.now(),
+		rules: FALLBACK_SENSITIVE_WORD_RULES,
+		stats: {
+			sourceCount: 2,
+			enabledSourceCount: 2,
+			totalWords:
+				FALLBACK_SENSITIVE_WORD_RULES.comment.reviewKeywords.length +
+				FALLBACK_SENSITIVE_WORD_RULES.comment.rejectKeywords.length,
+			scopes: {
+				comment: {
+					reviewCount: FALLBACK_SENSITIVE_WORD_RULES.comment.reviewKeywords.length,
+					rejectCount: FALLBACK_SENSITIVE_WORD_RULES.comment.rejectKeywords.length
+				},
+				post: {
+					reviewCount: FALLBACK_SENSITIVE_WORD_RULES.post.reviewKeywords.length,
+					rejectCount: FALLBACK_SENSITIVE_WORD_RULES.post.rejectKeywords.length
+				}
+			}
+		}
+	}
+}
+
+function resetSensitiveWordCache() {
+	sensitiveWordCache = {
+		expiresAt: 0,
+		payload: null
+	}
+}
 
 function unwrapDoc(data) {
 	if (!data) return null
 	return Array.isArray(data) ? data[0] || null : data
+}
+
+function sanitizeWordList(words = []) {
+	return Array.from(
+		new Set(
+			(words || [])
+				.map((item) => String(item || '').trim())
+				.filter(Boolean)
+				.filter((item) => normalizeRiskText(item).length >= 2)
+				.filter((item) => !/[=><]/.test(item))
+		)
+	)
+}
+
+function sortKeywordsBySpecificity(words = []) {
+	return [...(Array.isArray(words) ? words : [])].sort((left, right) => {
+		const rightLength = normalizeRiskText(right).length
+		const leftLength = normalizeRiskText(left).length
+		if (rightLength !== leftLength) return rightLength - leftLength
+		return String(right || '').length - String(left || '').length
+	})
+}
+
+FALLBACK_SENSITIVE_WORD_RULES.comment.reviewKeywords = sortKeywordsBySpecificity(sanitizeWordList(COMMUNITY_REVIEW_KEYWORDS))
+FALLBACK_SENSITIVE_WORD_RULES.comment.rejectKeywords = sortKeywordsBySpecificity(sanitizeWordList(COMMUNITY_REJECT_KEYWORDS))
+FALLBACK_SENSITIVE_WORD_RULES.post.reviewKeywords = sortKeywordsBySpecificity(sanitizeWordList(COMMUNITY_REVIEW_KEYWORDS))
+FALLBACK_SENSITIVE_WORD_RULES.post.rejectKeywords = sortKeywordsBySpecificity(sanitizeWordList(COMMUNITY_REJECT_KEYWORDS))
+
+function matchesSensitiveScope(scopes, targetScope) {
+	const scopeList = Array.isArray(scopes) ? scopes : [scopes]
+	return scopeList.map((item) => String(item || '').trim()).includes(String(targetScope || '').trim())
+}
+
+function buildSensitiveWordPayloadFromDocs(docs = []) {
+	const payload = {
+		source: 'database',
+		loadedAt: Date.now(),
+		rules: {
+			comment: { reviewKeywords: [], rejectKeywords: [] },
+			post: { reviewKeywords: [], rejectKeywords: [] }
+		},
+		stats: {
+			sourceCount: Array.isArray(docs) ? docs.length : 0,
+			enabledSourceCount: 0,
+			totalWords: 0,
+			scopes: {
+				comment: { reviewCount: 0, rejectCount: 0 },
+				post: { reviewCount: 0, rejectCount: 0 }
+			}
+		}
+	}
+
+	for (const doc of Array.isArray(docs) ? docs : []) {
+		if (!doc || doc.enabled === false) continue
+		const level = String(doc.level || 'review').trim() === 'reject' ? 'reject' : 'review'
+		const words = sanitizeWordList(doc.words)
+		if (!words.length) continue
+
+		payload.stats.enabledSourceCount += 1
+		payload.stats.totalWords += words.length
+
+		if (matchesSensitiveScope(doc.scopes, 'comment')) {
+			payload.rules.comment[level === 'reject' ? 'rejectKeywords' : 'reviewKeywords'].push(...words)
+		}
+		if (matchesSensitiveScope(doc.scopes, 'post')) {
+			payload.rules.post[level === 'reject' ? 'rejectKeywords' : 'reviewKeywords'].push(...words)
+		}
+	}
+
+	payload.rules.comment.reviewKeywords = sortKeywordsBySpecificity(sanitizeWordList(payload.rules.comment.reviewKeywords))
+	payload.rules.comment.rejectKeywords = sortKeywordsBySpecificity(sanitizeWordList(payload.rules.comment.rejectKeywords))
+	payload.rules.post.reviewKeywords = sortKeywordsBySpecificity(sanitizeWordList(payload.rules.post.reviewKeywords))
+	payload.rules.post.rejectKeywords = sortKeywordsBySpecificity(sanitizeWordList(payload.rules.post.rejectKeywords))
+
+	payload.stats.scopes.comment.reviewCount = payload.rules.comment.reviewKeywords.length
+	payload.stats.scopes.comment.rejectCount = payload.rules.comment.rejectKeywords.length
+	payload.stats.scopes.post.reviewCount = payload.rules.post.reviewKeywords.length
+	payload.stats.scopes.post.rejectCount = payload.rules.post.rejectKeywords.length
+
+	return payload
+}
+
+async function loadSensitiveWordPayload({ force = false } = {}) {
+	if (!force && sensitiveWordCache.payload && sensitiveWordCache.expiresAt > Date.now()) {
+		return sensitiveWordCache.payload
+	}
+
+	try {
+		const res = await db.collection(SENSITIVE_WORDS).where({ enabled: true }).limit(100).get()
+		const docs = Array.isArray(res?.data) ? res.data : []
+		const payload = docs.length ? buildSensitiveWordPayloadFromDocs(docs) : getFallbackSensitiveWordPayload()
+		sensitiveWordCache = {
+			expiresAt: Date.now() + SENSITIVE_WORDS_CACHE_TTL_MS,
+			payload
+		}
+		return payload
+	} catch (e) {
+		const fallback = getFallbackSensitiveWordPayload()
+		sensitiveWordCache = {
+			expiresAt: Date.now() + SENSITIVE_WORDS_CACHE_TTL_MS,
+			payload: fallback
+		}
+		return fallback
+	}
+}
+
+function buildSensitiveWordStatsPayload(payload) {
+	return {
+		source: String(payload?.source || 'fallback'),
+		loadedAt: Number(payload?.loadedAt || 0),
+		sourceCount: Number(payload?.stats?.sourceCount || 0),
+		enabledSourceCount: Number(payload?.stats?.enabledSourceCount || 0),
+		totalWords: Number(payload?.stats?.totalWords || 0),
+		commentReviewCount: Number(payload?.stats?.scopes?.comment?.reviewCount || 0),
+		commentRejectCount: Number(payload?.stats?.scopes?.comment?.rejectCount || 0),
+		postReviewCount: Number(payload?.stats?.scopes?.post?.reviewCount || 0),
+		postRejectCount: Number(payload?.stats?.scopes?.post?.rejectCount || 0)
+	}
+}
+
+function buildSensitiveWordSeedDocs() {
+	const now = Date.now()
+	return (Array.isArray(SENSITIVE_WORD_SEED_DOCS) ? SENSITIVE_WORD_SEED_DOCS : []).map((doc) => {
+		const words = sanitizeWordList(doc.words)
+		return {
+			_id: `seed__${String(doc.sourceKey || '').trim()}`,
+			source_key: String(doc.sourceKey || '').trim(),
+			source_name: String(doc.sourceName || '').trim(),
+			source_type: String(doc.sourceType || 'project').trim(),
+			category: String(doc.category || 'general').trim(),
+			level: String(doc.level || 'review').trim() === 'reject' ? 'reject' : 'review',
+			scopes: sanitizeWordList(doc.scopes),
+			words,
+			word_count: words.length,
+			enabled: true,
+			synced_from: 'seed',
+			last_synced_at: now,
+			updated_at: now
+		}
+	})
 }
 
 function normalizeOpenid(value) {
@@ -376,11 +564,28 @@ function containsKeyword(text, keyword) {
 	return normalizedText.includes(normalizedKeyword)
 }
 
+function collectKeywordHits(text, keywords = [], maxHits = 5) {
+	const hits = []
+	for (const keyword of Array.isArray(keywords) ? keywords : []) {
+		if (!containsKeyword(text, keyword)) continue
+		const normalizedKeyword = normalizeRiskText(keyword)
+		if (hits.some((item) => item.normalized.includes(normalizedKeyword))) continue
+		hits.push({
+			raw: String(keyword),
+			normalized: normalizedKeyword
+		})
+		if (hits.length >= maxHits) break
+	}
+	return hits.map((item) => item.raw)
+}
+
 function normalizeRiskText(value) {
 	return String(value || '')
 		.toLowerCase()
 		.trim()
+		.replace(/[\u200b-\u200f\ufeff]/g, '')
 		.replace(/[\s\u00a0`~!@#$%^&*()\-_=+\[\]{}\\|;:'",.<>/?，。！？；：、】【（）《》、·]/g, '')
+		.replace(/艹/g, '草')
 		.replace(/微\s*信|薇\s*信|威\s*信/g, '微信')
 		.replace(/扣\s*扣/g, 'qq')
 		.replace(/q[qｑＱ]/g, 'qq')
@@ -395,6 +600,24 @@ function normalizeRiskText(value) {
 		})
 }
 
+function hitPattern(text, regex) {
+	const raw = String(text || '')
+	if (!raw || !(regex instanceof RegExp)) return false
+	regex.lastIndex = 0
+	if (regex.test(raw)) return true
+	const normalized = normalizeRiskText(raw)
+	regex.lastIndex = 0
+	return !!normalized && regex.test(normalized)
+}
+
+const COMMENT_ABUSE_PATTERNS = [
+	{ tag: 'review:abuse:sb', regex: /(^|[^a-z])sb([^a-z]|$)/i },
+	{ tag: 'review:abuse:cnm', regex: /(?:操|艹|草)\s*(?:你|尼)\s*(?:妈|玛)|草\s*泥\s*马|cnm/i },
+	{ tag: 'review:abuse:nmsl', regex: /nmsl/i },
+	{ tag: 'review:abuse:tmd', regex: /他\s*妈\s*的|你\s*妈\s*的|妈\s*的|tmd/i },
+	{ tag: 'review:abuse:shabi', regex: /傻\s*[逼比b币批]|煞\s*笔|沙\s*[比b币]/i }
+]
+
 function buildRiskResult(tags = [], score = 0, status = AUDIT_STATUS.APPROVED, reason = '') {
 	return {
 		tags,
@@ -404,20 +627,27 @@ function buildRiskResult(tags = [], score = 0, status = AUDIT_STATUS.APPROVED, r
 	}
 }
 
-function evaluateCommentRisk(content) {
+async function evaluateCommentRisk(content) {
 	const text = String(content || '').trim()
+	const sensitivePayload = await loadSensitiveWordPayload()
+	const reviewKeywords = sensitivePayload?.rules?.comment?.reviewKeywords || FALLBACK_SENSITIVE_WORD_RULES.comment.reviewKeywords
+	const rejectKeywords = sensitivePayload?.rules?.comment?.rejectKeywords || FALLBACK_SENSITIVE_WORD_RULES.comment.rejectKeywords
 	let score = 0
 	const tags = []
 
-	for (const keyword of REJECT_KEYWORDS) {
-		if (containsKeyword(text, keyword)) {
-			tags.push(`reject:${keyword}`)
-			score += 100
-		}
+	for (const keyword of collectKeywordHits(text, rejectKeywords, 3)) {
+		tags.push(`reject:${keyword}`)
 	}
-	for (const keyword of REVIEW_KEYWORDS) {
-		if (containsKeyword(text, keyword)) {
-			tags.push(`review:${keyword}`)
+	if (tags.length) score += 100
+
+	for (const keyword of collectKeywordHits(text, reviewKeywords, 5)) {
+		tags.push(`review:${keyword}`)
+	}
+	if (tags.some((item) => item.startsWith('review:'))) score += 35
+	for (const pattern of COMMENT_ABUSE_PATTERNS) {
+		if (!pattern?.tag || !pattern?.regex) continue
+		if (hitPattern(text, pattern.regex)) {
+			tags.push(pattern.tag)
 			score += 35
 		}
 	}
@@ -434,28 +664,28 @@ function evaluateCommentRisk(content) {
 		return buildRiskResult(tags, score, AUDIT_STATUS.PENDING, '命中高风险内容，等待管理员审核')
 	}
 	if (score >= 35) {
-		return buildRiskResult(tags, score, AUDIT_STATUS.PENDING, '评论包含疑似引流或联系方式，等待管理员审核')
+		return buildRiskResult(tags, score, AUDIT_STATUS.PENDING, '评论包含敏感、辱骂或疑似引流内容，等待管理员审核')
 	}
 	return buildRiskResult(tags, score, AUDIT_STATUS.APPROVED, '')
 }
 
-function evaluatePostRisk(siteName, siteUrl, summary) {
+async function evaluatePostRisk(siteName, siteUrl, summary) {
 	const text = [siteName, siteUrl, summary].join('\n')
+	const sensitivePayload = await loadSensitiveWordPayload()
+	const reviewKeywords = sensitivePayload?.rules?.post?.reviewKeywords || FALLBACK_SENSITIVE_WORD_RULES.post.reviewKeywords
+	const rejectKeywords = sensitivePayload?.rules?.post?.rejectKeywords || FALLBACK_SENSITIVE_WORD_RULES.post.rejectKeywords
 	let score = 0
 	const tags = []
 
-	for (const keyword of REJECT_KEYWORDS) {
-		if (containsKeyword(text, keyword)) {
-			tags.push(`reject:${keyword}`)
-			score += 100
-		}
+	for (const keyword of collectKeywordHits(text, rejectKeywords, 3)) {
+		tags.push(`reject:${keyword}`)
 	}
-	for (const keyword of REVIEW_KEYWORDS) {
-		if (containsKeyword(text, keyword)) {
-			tags.push(`review:${keyword}`)
-			score += 20
-		}
+	if (tags.length) score += 100
+
+	for (const keyword of collectKeywordHits(text, reviewKeywords, 5)) {
+		tags.push(`review:${keyword}`)
 	}
+	if (tags.some((item) => item.startsWith('review:'))) score += 20
 	const host = extractHost(siteUrl)
 	if (!host) {
 		tags.push('review:invalid-host')
@@ -500,11 +730,61 @@ async function listAuditItemsByType(itemType, status, page, limit) {
 	}
 }
 
+async function syncSensitiveWordSeeds() {
+	const docs = buildSensitiveWordSeedDocs()
+	const collection = db.collection(SENSITIVE_WORDS)
+
+	for (const doc of docs) {
+		const { _id, ...data } = doc
+		await collection.doc(_id).set(data)
+	}
+
+	resetSensitiveWordCache()
+	const payload = await loadSensitiveWordPayload({ force: true })
+	return {
+		syncedCount: docs.length,
+		...buildSensitiveWordStatsPayload(payload)
+	}
+}
+
 exports.main = async (event) => {
 	const { action } = event || {}
 
 	if (action === 'health') {
 		return { errCode: 0, service: 'community-data', ok: true, serverTime: Date.now() }
+	}
+
+	if (action === 'getSensitiveWordStats') {
+		const auth = await resolveSessionUser(event)
+		const adminError = ensureAdminUser(auth)
+		if (adminError) return adminError
+
+		try {
+			const payload = await loadSensitiveWordPayload({ force: true })
+			return {
+				errCode: 0,
+				...buildSensitiveWordStatsPayload(payload)
+			}
+		} catch (e) {
+			return { errCode: 'DB_ERROR', errMsg: e.message || 'get sensitive word stats failed' }
+		}
+	}
+
+	if (action === 'syncSensitiveWords') {
+		const auth = await resolveSessionUser(event)
+		const adminError = ensureAdminUser(auth)
+		if (adminError) return adminError
+
+		try {
+			const payload = await syncSensitiveWordSeeds()
+			return {
+				errCode: 0,
+				message: '敏感词库同步完成',
+				...payload
+			}
+		} catch (e) {
+			return { errCode: 'DB_ERROR', errMsg: e.message || 'sync sensitive words failed' }
+		}
 	}
 
 	if (action === 'createPost') {
@@ -541,7 +821,7 @@ exports.main = async (event) => {
 			}
 
 			const author = buildAuthorSnapshot(auth.user, openid)
-			const risk = evaluatePostRisk(siteName, siteUrl, summary)
+			const risk = await evaluatePostRisk(siteName, siteUrl, summary)
 			await db.collection(POSTS).doc(postId).set({
 				openid,
 				site_name: siteName,
@@ -723,7 +1003,7 @@ exports.main = async (event) => {
 
 			const now = Date.now()
 			const author = buildAuthorSnapshot(auth.user, auth.openid)
-			const risk = evaluateCommentRisk(content)
+			const risk = await evaluateCommentRisk(content)
 			const addRes = await db.collection(COMMENTS).add({
 				post_id: postId,
 				openid: auth.openid,

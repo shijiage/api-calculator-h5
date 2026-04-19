@@ -11,6 +11,22 @@
 		</view>
 
 		<scroll-view class="page__scroll" scroll-y :show-scrollbar="false">
+			<view class="lexicon-card">
+				<view class="lexicon-card__main">
+					<text class="lexicon-card__title">{{ TEXT.lexiconTitle }}</text>
+					<text class="lexicon-card__desc">{{ getSensitiveStatsSummary() }}</text>
+					<text v-if="sensitiveWordStats?.loadedAt" class="lexicon-card__meta">{{ getSensitiveStatsMeta() }}</text>
+				</view>
+				<view
+					class="lexicon-card__btn"
+					:class="{ 'lexicon-card__btn--disabled': syncingLexicon }"
+					hover-class="lexicon-card__btn--hover"
+					@click="syncSensitiveWords"
+				>
+					<text class="lexicon-card__btn-text">{{ syncingLexicon ? TEXT.syncingLexicon : TEXT.syncLexicon }}</text>
+				</view>
+			</view>
+
 			<view class="filter-row">
 				<view
 					v-for="item in typeOptions"
@@ -115,11 +131,21 @@
 <script setup>
 import { ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { listCommunityAuditItems, reviewCommunityAuditItem } from '@/common/community-data.js'
+import {
+	getCommunitySensitiveWordStats,
+	listCommunityAuditItems,
+	reviewCommunityAuditItem,
+	syncCommunitySensitiveWords
+} from '@/common/community-data.js'
 import { getStoredIsAdmin, hasStoredSession, navigateToLoginWithReturnUrl } from '@/common/auth.js'
 
 const TEXT = {
 	title: '社区审核',
+	lexiconTitle: '敏感词库',
+	lexiconEmpty: '尚未读取到词库统计，点击右侧按钮可重新同步本地词库。',
+	syncLexicon: '同步词库',
+	syncingLexicon: '同步中...',
+	syncLexiconSuccess: '词库已同步',
 	loading: '审核列表加载中...',
 	retry: '重新加载',
 	emptyTitle: '当前没有待处理内容',
@@ -158,6 +184,8 @@ const items = ref([])
 const page = ref(1)
 const hasMore = ref(false)
 const actioningId = ref('')
+const syncingLexicon = ref(false)
+const sensitiveWordStats = ref(null)
 
 function ensureAdmin() {
 	if (!hasStoredSession()) {
@@ -224,6 +252,47 @@ async function refreshList() {
 	await loadList(true)
 }
 
+async function loadSensitiveWordStats() {
+	if (!ensureAdmin()) return
+	try {
+		sensitiveWordStats.value = await getCommunitySensitiveWordStats()
+	} catch (e) {
+		if (e?.code === 'AUTH_EXPIRED') {
+			navigateToLoginWithReturnUrl('/pages/community-audit/community-audit')
+		}
+	}
+}
+
+function getSensitiveStatsSummary() {
+	const stats = sensitiveWordStats.value
+	if (!stats) return TEXT.lexiconEmpty
+	return `已启用 ${stats.enabledSourceCount || 0} 个来源，共 ${stats.totalWords || 0} 个词条；评论审核 ${stats.commentReviewCount || 0} 审核词 / ${stats.commentRejectCount || 0} 高风险词`
+}
+
+function getSensitiveStatsMeta() {
+	const stats = sensitiveWordStats.value
+	if (!stats?.loadedAt) return ''
+	return `来源：${stats.source === 'database' ? '数据库' : '回退词库'} · 最近加载：${new Date(stats.loadedAt).toLocaleString('zh-CN', { hour12: false })}`
+}
+
+async function syncSensitiveWords() {
+	if (syncingLexicon.value || !ensureAdmin()) return
+	syncingLexicon.value = true
+	try {
+		await syncCommunitySensitiveWords()
+		await loadSensitiveWordStats()
+		uni.showToast({ title: TEXT.syncLexiconSuccess, icon: 'success' })
+	} catch (e) {
+		if (e?.code === 'AUTH_EXPIRED') {
+			navigateToLoginWithReturnUrl('/pages/community-audit/community-audit')
+			return
+		}
+		uni.showToast({ title: e?.message || TEXT.loadFailed, icon: 'none' })
+	} finally {
+		syncingLexicon.value = false
+	}
+}
+
 async function loadMore() {
 	if (loadingMore.value || !hasMore.value) return
 	await loadList(false)
@@ -271,6 +340,7 @@ onShow(() => {
 	const systemInfo = uni.getSystemInfoSync()
 	statusBarHeight.value = systemInfo.statusBarHeight || 20
 	void refreshList()
+	void loadSensitiveWordStats()
 })
 </script>
 
@@ -351,6 +421,64 @@ onShow(() => {
 	flex-wrap: wrap;
 	gap: 16rpx;
 	margin-bottom: 20rpx;
+}
+
+.lexicon-card {
+	display: flex;
+	align-items: center;
+	gap: 18rpx;
+	padding: 24rpx;
+	margin-bottom: 22rpx;
+	background: rgba(255, 255, 255, 0.96);
+	border-radius: 28rpx;
+	box-shadow: 0 14rpx 32rpx rgba(20, 31, 58, 0.06);
+}
+
+.lexicon-card__main {
+	flex: 1;
+	min-width: 0;
+}
+
+.lexicon-card__title {
+	display: block;
+	font-size: 28rpx;
+	font-weight: 800;
+	color: #111827;
+}
+
+.lexicon-card__desc,
+.lexicon-card__meta {
+	display: block;
+	margin-top: 10rpx;
+	font-size: 22rpx;
+	line-height: 1.6;
+	color: #667085;
+}
+
+.lexicon-card__btn {
+	height: 72rpx;
+	padding: 0 24rpx;
+	border-radius: 18rpx;
+	background: linear-gradient(135deg, #1749bb 0%, #2458d3 100%);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	flex-shrink: 0;
+}
+
+.lexicon-card__btn--hover {
+	opacity: 0.92;
+}
+
+.lexicon-card__btn--disabled {
+	opacity: 0.7;
+	pointer-events: none;
+}
+
+.lexicon-card__btn-text {
+	font-size: 24rpx;
+	font-weight: 700;
+	color: #ffffff;
 }
 
 .filter-row--secondary {

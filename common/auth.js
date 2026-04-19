@@ -17,7 +17,9 @@ const TEXT = {
 	loginCodeMissing: 'uni.login \u672a\u8fd4\u56de code',
 	loginCallFailed:
 		'\u4e91\u51fd\u6570\u8c03\u7528\u5931\u8d25\uff1a\u8bf7\u786e\u8ba4\u5df2\u5728 HBuilderX \u5173\u8054 uniCloud-aliyun \u5e76\u4e0a\u4f20\u4e91\u51fd\u6570 login-by-wx',
-	loginFailed: '\u767b\u5f55\u5931\u8d25'
+	loginFailed: '\u767b\u5f55\u5931\u8d25',
+	webLoginFailed: '\u8d26\u53f7\u767b\u5f55\u5931\u8d25',
+	webRegisterFailed: '\u8d26\u53f7\u6ce8\u518c\u5931\u8d25'
 }
 
 function buildCurrentPageUrl() {
@@ -118,6 +120,25 @@ export function clearLogin() {
 	} catch (e) {}
 }
 
+function applyLoginPayload(payload) {
+	uni.setStorageSync(STORAGE_OPENID, payload.openid)
+	uni.setStorageSync(STORAGE_USER_COUNT, payload.userCount || 0)
+	uni.setStorageSync(STORAGE_IS_ADMIN, payload.isAdmin ? 1 : 0)
+	uni.setStorageSync(STORAGE_LOGIN_AT, Date.now())
+	uni.setStorageSync(STORAGE_SESSION_TOKEN, payload.sessionToken || '')
+	uni.setStorageSync(STORAGE_SESSION_EXPIRES_AT, payload.sessionExpiresAt || 0)
+	markLoginSuccess()
+
+	return {
+		openid: String(payload.openid || ''),
+		userCount: Number(payload.userCount || 0),
+		isNew: !!payload.isNew,
+		isAdmin: !!payload.isAdmin,
+		sessionToken: String(payload.sessionToken || ''),
+		sessionExpiresAt: Number(payload.sessionExpiresAt || 0)
+	}
+}
+
 export function navigateToLoginWithReturnUrl(returnUrl) {
 	setStoredLoginReturnUrl(returnUrl || buildCurrentPageUrl())
 	uni.navigateTo({ url: '/pages/login/login' })
@@ -150,26 +171,57 @@ export async function loginByWxCloud() {
 		throw new Error(msg)
 	}
 
-	uni.setStorageSync(STORAGE_OPENID, payload.openid)
-	uni.setStorageSync(STORAGE_USER_COUNT, payload.userCount || 0)
-	uni.setStorageSync(STORAGE_IS_ADMIN, payload.isAdmin ? 1 : 0)
-	uni.setStorageSync(STORAGE_LOGIN_AT, Date.now())
-	uni.setStorageSync(STORAGE_SESSION_TOKEN, payload.sessionToken || '')
-	uni.setStorageSync(STORAGE_SESSION_EXPIRES_AT, payload.sessionExpiresAt || 0)
-	markLoginSuccess()
+	return applyLoginPayload(payload)
+}
 
-	return {
-		openid: payload.openid,
-		userCount: payload.userCount || 0,
-		isNew: !!payload.isNew,
-		isAdmin: !!payload.isAdmin,
-		sessionToken: String(payload.sessionToken || ''),
-		sessionExpiresAt: Number(payload.sessionExpiresAt || 0)
+async function callWebLoginFunction(data, fallbackMessage) {
+	let res
+	try {
+		res = await uniCloud.callFunction({
+			name: 'login-web',
+			data,
+			timeout: CLOUD_CALL_TIMEOUT_MS
+		})
+	} catch (e) {
+		throw new Error(e.errMsg || e.message || fallbackMessage)
 	}
+
+	if (res.errMsg && res.errMsg !== 'cloud.callFunction:ok' && res.errMsg !== 'callFunction:ok') {
+		throw new Error(res.errMsg)
+	}
+
+	const payload = res.result
+	if (!payload || payload.errCode !== 0) {
+		throw new Error((payload && payload.errMsg) || fallbackMessage)
+	}
+
+	return applyLoginPayload(payload)
+}
+
+export async function loginByWebAccount(options = {}) {
+	return callWebLoginFunction(
+		{
+			action: 'login',
+			username: String(options.username || '').trim(),
+			password: String(options.password || '')
+		},
+		TEXT.webLoginFailed
+	)
+}
+
+export async function registerByWebAccount(options = {}) {
+	return callWebLoginFunction(
+		{
+			action: 'register',
+			username: String(options.username || '').trim(),
+			password: String(options.password || '')
+		},
+		TEXT.webRegisterFailed
+	)
 }
 
 export function ensureLoggedInOrPrompt(options) {
-	if (getStoredOpenid()) return Promise.resolve(true)
+	if (hasStoredSession()) return Promise.resolve(true)
 	const title = (options && options.title) || TEXT.loginNeeded
 	const content = (options && options.content) || TEXT.loginBeforeUse
 	const returnUrl = (options && options.returnUrl) || buildCurrentPageUrl()
