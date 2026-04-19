@@ -3,6 +3,18 @@
 		<view class="status-bar" :style="{ height: statusBarH + 'px' }" />
 
 		<scroll-view class="scroll" scroll-y :show-scrollbar="false">
+			<view class="discover-header">
+				<text class="discover-header__title">测试案例</text>
+				<view class="discover-tabs">
+					<view class="discover-tab" hover-class="discover-tab--hover" @click="goRecommendPage">
+						<text class="discover-tab__text">站点推荐</text>
+					</view>
+					<view class="discover-tab discover-tab--active">
+						<text class="discover-tab__text discover-tab__text--active">测试案例</text>
+					</view>
+				</view>
+			</view>
+
 			<view class="hero-shell">
 				<view class="hero-card">
 					<text class="hero-card__title">测试案例库</text>
@@ -247,6 +259,10 @@ function copyCase(item, level, idx) {
 		}
 	})
 }
+
+function goRecommendPage() {
+	uni.redirectTo({ url: '/pages/recommend/recommend' })
+}
 </script>
 
 <style scoped lang="scss">
@@ -263,6 +279,57 @@ function copyCase(item, level, idx) {
 	height: calc(100vh - env(safe-area-inset-bottom));
 	padding: 0 18rpx;
 	box-sizing: border-box;
+}
+
+.discover-header {
+	padding: 10rpx 6rpx 18rpx;
+}
+
+.discover-header__title {
+	display: block;
+	font-size: 42rpx;
+	line-height: 1.12;
+	font-weight: 800;
+	color: #171c27;
+	margin-bottom: 18rpx;
+}
+
+.discover-tabs {
+	display: inline-flex;
+	align-items: center;
+	gap: 10rpx;
+	padding: 10rpx;
+	border-radius: 999rpx;
+	background: #e8edf6;
+}
+
+.discover-tab {
+	min-width: 176rpx;
+	height: 68rpx;
+	padding: 0 24rpx;
+	border-radius: 999rpx;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.discover-tab--active {
+	background: #1a4a9e;
+	box-shadow: 0 10rpx 24rpx rgba(26, 74, 158, 0.22);
+}
+
+.discover-tab--hover {
+	opacity: 0.88;
+}
+
+.discover-tab__text {
+	font-size: 24rpx;
+	font-weight: 700;
+	color: #6f7683;
+}
+
+.discover-tab__text--active {
+	color: #ffffff;
 }
 
 .hero-shell {

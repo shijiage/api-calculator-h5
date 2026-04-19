@@ -5,6 +5,15 @@
 				<text class="header__title">站点推荐</text>
 			</view>
 
+			<view class="discover-tabs">
+				<view class="discover-tab discover-tab--active">
+					<text class="discover-tab__text discover-tab__text--active">站点推荐</text>
+				</view>
+				<view class="discover-tab" hover-class="discover-tab--hover" @click="goTestCasesPage">
+					<text class="discover-tab__text">测试案例</text>
+				</view>
+			</view>
+
 			<view class="search-bar">
 				<uni-icons type="search" size="44rpx" color="#5d84cf" />
 				<input
@@ -264,6 +273,10 @@ function mixRateClass(rate) {
 	return String(rate || '').trim() !== '0%' ? 'metrics__value--danger' : ''
 }
 
+function goTestCasesPage() {
+	uni.redirectTo({ url: '/pages/test-cases/test-cases' })
+}
+
 function copyCard(card) {
 	const fallbackText = [
 		`站点：${card.name}`,
@@ -365,9 +378,48 @@ async function scheduleMeasureTopPanel() {
 	letter-spacing: -0.6rpx;
 }
 
+.discover-tabs {
+	margin-top: 22rpx;
+	display: inline-flex;
+	align-items: center;
+	gap: 10rpx;
+	padding: 10rpx;
+	border-radius: 999rpx;
+	background: #eef2f8;
+}
+
+.discover-tab {
+	min-width: 176rpx;
+	height: 68rpx;
+	padding: 0 24rpx;
+	border-radius: 999rpx;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+}
+
+.discover-tab--active {
+	background: #1a4a9e;
+	box-shadow: 0 10rpx 24rpx rgba(26, 74, 158, 0.22);
+}
+
+.discover-tab--hover {
+	opacity: 0.88;
+}
+
+.discover-tab__text {
+	font-size: 24rpx;
+	font-weight: 700;
+	color: #6e7787;
+}
+
+.discover-tab__text--active {
+	color: #ffffff;
+}
+
 .search-bar {
 	height: 100rpx;
-	margin-top: 32rpx;
+	margin-top: 24rpx;
 	background: #f1f2f5;
 	border-radius: 24rpx;
 	display: flex;

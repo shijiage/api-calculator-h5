@@ -48,7 +48,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
-import { loginByWxCloud, getStoredOpenid, getStoredLoginReturnUrl, clearLoginReturnUrl } from '@/common/auth.js'
+import { loginByWxCloud, hasStoredSession, getStoredLoginReturnUrl, clearLoginReturnUrl } from '@/common/auth.js'
 
 const statusBarH = ref(20)
 const loading = ref(false)
@@ -56,7 +56,7 @@ const error = ref('')
 const agreed = ref(false)
 
 function goHomeIfLogged() {
-	if (getStoredOpenid()) {
+	if (hasStoredSession()) {
 		uni.reLaunch({ url: '/pages/index/index' })
 	}
 }

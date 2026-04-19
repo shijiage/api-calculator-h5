@@ -6,6 +6,19 @@ const STORAGE_USER_COUNT = 'calc_user_count'
 const STORAGE_IS_ADMIN = 'calc_is_admin'
 const STORAGE_LOGIN_AT = 'calc_login_at'
 const STORAGE_LOGIN_RETURN_URL = 'calc_login_return_url'
+const STORAGE_SESSION_TOKEN = 'calc_session_token'
+const STORAGE_SESSION_EXPIRES_AT = 'calc_session_expires_at'
+
+const TEXT = {
+	loginNeeded: '\u9700\u8981\u767b\u5f55',
+	loginBeforeUse: '\u4f7f\u7528\u5bf9\u6bd4\u4e0e\u62a5\u544a\u529f\u80fd\u524d\u8bf7\u5148\u5b8c\u6210\u5fae\u4fe1\u767b\u5f55\u3002',
+	goLogin: '\u53bb\u767b\u5f55',
+	cancel: '\u53d6\u6d88',
+	loginCodeMissing: 'uni.login \u672a\u8fd4\u56de code',
+	loginCallFailed:
+		'\u4e91\u51fd\u6570\u8c03\u7528\u5931\u8d25\uff1a\u8bf7\u786e\u8ba4\u5df2\u5728 HBuilderX \u5173\u8054 uniCloud-aliyun \u5e76\u4e0a\u4f20\u4e91\u51fd\u6570 login-by-wx',
+	loginFailed: '\u767b\u5f55\u5931\u8d25'
+}
 
 function buildCurrentPageUrl() {
 	try {
@@ -43,8 +56,41 @@ export function clearLoginReturnUrl() {
 	} catch (e) {}
 }
 
+export function setStoredLoginReturnUrl(returnUrl) {
+	try {
+		uni.setStorageSync(STORAGE_LOGIN_RETURN_URL, returnUrl || buildCurrentPageUrl())
+	} catch (e) {}
+}
+
 export function getStoredOpenid() {
 	return uni.getStorageSync(STORAGE_OPENID) || ''
+}
+
+export function getStoredSessionToken() {
+	try {
+		return String(uni.getStorageSync(STORAGE_SESSION_TOKEN) || '')
+	} catch {
+		return ''
+	}
+}
+
+export function getStoredSessionExpiresAt() {
+	try {
+		const raw = uni.getStorageSync(STORAGE_SESSION_EXPIRES_AT)
+		const value = Number(raw || 0)
+		return Number.isFinite(value) ? value : 0
+	} catch {
+		return 0
+	}
+}
+
+export function hasStoredSession() {
+	const openid = getStoredOpenid()
+	const sessionToken = getStoredSessionToken()
+	const expiresAt = getStoredSessionExpiresAt()
+	if (!openid || !sessionToken) return false
+	if (expiresAt > 0 && expiresAt <= Date.now()) return false
+	return true
 }
 
 export function getStoredUserCount() {
@@ -67,17 +113,20 @@ export function clearLogin() {
 		uni.removeStorageSync(STORAGE_USER_COUNT)
 		uni.removeStorageSync(STORAGE_IS_ADMIN)
 		uni.removeStorageSync(STORAGE_LOGIN_AT)
+		uni.removeStorageSync(STORAGE_SESSION_TOKEN)
+		uni.removeStorageSync(STORAGE_SESSION_EXPIRES_AT)
 	} catch (e) {}
 }
 
-/**
- * 微信小程序静默登录：uni.login → 云函数 login-by-wx
- * @returns {{ openid: string, userCount: number, isNew: boolean, isAdmin: boolean }}
- */
+export function navigateToLoginWithReturnUrl(returnUrl) {
+	setStoredLoginReturnUrl(returnUrl || buildCurrentPageUrl())
+	uni.navigateTo({ url: '/pages/login/login' })
+}
+
 export async function loginByWxCloud() {
 	const loginRes = await uni.login({ provider: 'weixin' })
 	if (!loginRes.code) {
-		throw new Error(loginRes.errMsg || 'uni.login 未返回 code')
+		throw new Error(loginRes.errMsg || TEXT.loginCodeMissing)
 	}
 
 	let res
@@ -88,11 +137,7 @@ export async function loginByWxCloud() {
 			timeout: CLOUD_CALL_TIMEOUT_MS
 		})
 	} catch (e) {
-		throw new Error(
-			e.errMsg ||
-				e.message ||
-				'云函数调用失败：请确认已在 HBuilderX 关联 uniCloud-aliyun 并上传云函数 login-by-wx'
-		)
+		throw new Error(e.errMsg || e.message || TEXT.loginCallFailed)
 	}
 
 	if (res.errMsg && res.errMsg !== 'cloud.callFunction:ok' && res.errMsg !== 'callFunction:ok') {
@@ -101,7 +146,7 @@ export async function loginByWxCloud() {
 
 	const payload = res.result
 	if (!payload || payload.errCode !== 0) {
-		const msg = (payload && payload.errMsg) || '登录失败'
+		const msg = (payload && payload.errMsg) || TEXT.loginFailed
 		throw new Error(msg)
 	}
 
@@ -109,33 +154,32 @@ export async function loginByWxCloud() {
 	uni.setStorageSync(STORAGE_USER_COUNT, payload.userCount || 0)
 	uni.setStorageSync(STORAGE_IS_ADMIN, payload.isAdmin ? 1 : 0)
 	uni.setStorageSync(STORAGE_LOGIN_AT, Date.now())
+	uni.setStorageSync(STORAGE_SESSION_TOKEN, payload.sessionToken || '')
+	uni.setStorageSync(STORAGE_SESSION_EXPIRES_AT, payload.sessionExpiresAt || 0)
 	markLoginSuccess()
 
 	return {
 		openid: payload.openid,
 		userCount: payload.userCount || 0,
 		isNew: !!payload.isNew,
-		isAdmin: !!payload.isAdmin
+		isAdmin: !!payload.isAdmin,
+		sessionToken: String(payload.sessionToken || ''),
+		sessionExpiresAt: Number(payload.sessionExpiresAt || 0)
 	}
 }
 
-/**
- * 使用对比、报告等能力前调用：已登录返回 true；未登录则弹窗，点「去登录」跳转登录页并返回 false。
- * @param {{ title?: string, content?: string }} [options]
- */
 export function ensureLoggedInOrPrompt(options) {
 	if (getStoredOpenid()) return Promise.resolve(true)
-	const title = (options && options.title) || '需要登录'
-	const content =
-		(options && options.content) || '使用对比与报告功能前请先完成微信登录。'
+	const title = (options && options.title) || TEXT.loginNeeded
+	const content = (options && options.content) || TEXT.loginBeforeUse
 	const returnUrl = (options && options.returnUrl) || buildCurrentPageUrl()
 	return new Promise((resolve) => {
-		uni.setStorageSync(STORAGE_LOGIN_RETURN_URL, returnUrl)
+		setStoredLoginReturnUrl(returnUrl)
 		uni.showModal({
 			title,
 			content,
-			confirmText: '去登录',
-			cancelText: '取消',
+			confirmText: TEXT.goLogin,
+			cancelText: TEXT.cancel,
 			success(res) {
 				if (res.confirm) {
 					uni.navigateTo({ url: '/pages/login/login' })

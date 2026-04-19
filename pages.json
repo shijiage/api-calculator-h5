@@ -5,7 +5,8 @@
 			"style": {
 				"navigationStyle": "custom",
 				"navigationBarTitleText": "",
-				"backgroundColor": "#F7F8FA"
+				"backgroundColor": "#F7F8FA",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
@@ -13,21 +14,24 @@
 			"style": {
 				"navigationBarTitleText": "登录",
 				"navigationStyle": "custom",
-				"backgroundColor": "#F7F8FA"
+				"backgroundColor": "#F7F8FA",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
 			"path": "pages/agreement/service",
 			"style": {
 				"navigationBarTitleText": "用户服务协议",
-				"backgroundColor": "#F7F8FA"
+				"backgroundColor": "#F7F8FA",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
 			"path": "pages/agreement/privacy",
 			"style": {
 				"navigationBarTitleText": "隐私政策",
-				"backgroundColor": "#F7F8FA"
+				"backgroundColor": "#F7F8FA",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
@@ -35,7 +39,8 @@
 			"style": {
 				"navigationStyle": "custom",
 				"navigationBarTitleText": "",
-				"backgroundColor": "#F7F8FA"
+				"backgroundColor": "#F7F8FA",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
@@ -43,7 +48,8 @@
 			"style": {
 				"navigationStyle": "custom",
 				"navigationBarTitleText": "",
-				"backgroundColor": "#F7F8FA"
+				"backgroundColor": "#F7F8FA",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
@@ -51,7 +57,8 @@
 			"style": {
 				"navigationStyle": "custom",
 				"navigationBarTitleText": "",
-				"backgroundColor": "#F7F8FA"
+				"backgroundColor": "#F7F8FA",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
@@ -59,7 +66,8 @@
 			"style": {
 				"navigationStyle": "custom",
 				"navigationBarTitleText": "",
-				"backgroundColor": "#F3F5F9"
+				"backgroundColor": "#F3F5F9",
+				"enablePullDownRefresh": false
 			}
 		},
 		{
@@ -67,7 +75,35 @@
 			"style": {
 				"navigationStyle": "custom",
 				"navigationBarTitleText": "",
-				"backgroundColor": "#F3F5F9"
+				"backgroundColor": "#F3F5F9",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/discover/discover",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F3F5F9",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/my-community-posts/my-community-posts",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F3F5F9",
+				"enablePullDownRefresh": false
+			}
+		},
+		{
+			"path": "pages/community-audit/community-audit",
+			"style": {
+				"navigationStyle": "custom",
+				"navigationBarTitleText": "",
+				"backgroundColor": "#F3F5F9",
+				"enablePullDownRefresh": false
 			}
 		}
 	],

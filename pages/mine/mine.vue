@@ -21,7 +21,7 @@
 				:trend-tag="historyTrendTag"
 			/>
 
-			<mine-menu-groups :groups="mineMenuGroups" @select="onMenu" />
+			<mine-menu-groups :groups="menuGroups" @select="onMenu" />
 
 			<view
 				v-if="isAdmin"
@@ -73,7 +73,7 @@ import { getUserSegment, getGrowthSnapshot } from '@/common/analytics.js'
 import { syncRecommendFromHvoy, dedupeRecommendData } from '@/common/recommend-data.js'
 import {
 	minePageDefaults,
-	mineMenuGroups,
+	mineMenuGroups as baseMineMenuGroups,
 	mineStatLabels,
 	CLOUD_CALL_TIMEOUT_MS,
 	MINE_WX_AVATAR_STORAGE_KEY,
@@ -89,6 +89,33 @@ const favoritesCount = ref(0)
 const isAdmin = ref(false)
 const syncingRecommend = ref(false)
 const dedupingRecommend = ref(false)
+
+const menuGroups = computed(() => {
+	const groups = Array.isArray(baseMineMenuGroups)
+		? baseMineMenuGroups.map((group) => ({
+				...group,
+				items: Array.isArray(group.items) ? [...group.items] : []
+			}))
+		: []
+
+	if (groups[0] && Array.isArray(groups[0].items) && !groups[0].items.some((item) => item.key === 'communityPosts')) {
+		groups[0].items.splice(2, 0, {
+			key: 'communityPosts',
+			label: '我的推荐',
+			icon: 'chatboxes'
+		})
+	}
+
+	if (isAdmin.value && groups[1] && Array.isArray(groups[1].items) && !groups[1].items.some((item) => item.key === 'communityAudit')) {
+		groups[1].items.unshift({
+			key: 'communityAudit',
+			label: '社区审核',
+			icon: 'flag'
+		})
+	}
+
+	return groups
+})
 
 function showLoading(title) {
 	uni.showLoading({ title: title || '加载中', mask: true })
@@ -368,6 +395,12 @@ async function onMenu(key) {
 			break
 		case 'reports':
 			uni.redirectTo({ url: '/pages/records/records' })
+			break
+		case 'communityPosts':
+			uni.navigateTo({ url: '/pages/my-community-posts/my-community-posts' })
+			break
+		case 'communityAudit':
+			uni.navigateTo({ url: '/pages/community-audit/community-audit' })
 			break
 		case 'testCases':
 			uni.navigateTo({ url: '/pages/test-cases/test-cases' })

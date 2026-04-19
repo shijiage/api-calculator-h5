@@ -1,0 +1,17 @@
+{
+	"bsonType": "object",
+	"required": ["post_id", "openid", "day_key", "day_start", "created_at"],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"post_id": { "bsonType": "string", "description": "关联的推荐帖子 ID" },
+		"openid": { "bsonType": "string", "description": "复制用户的 openid" },
+		"day_key": { "bsonType": "string", "description": "按中国时区生成的日期键，例如 20260419" },
+		"day_start": { "bsonType": "long", "description": "当天 00:00:00 的时间戳" },
+		"created_at": { "bsonType": "long", "description": "首次记录复制行为的时间戳" }
+	}
+}

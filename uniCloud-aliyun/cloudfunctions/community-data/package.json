@@ -1,0 +1,10 @@
+{
+	"name": "community-data",
+	"version": "1.0.0",
+	"description": "社区推荐、点赞与评论服务",
+	"main": "index.js",
+	"cloudfunction-config": {
+		"memorySize": 256,
+		"timeout": 60
+	}
+}

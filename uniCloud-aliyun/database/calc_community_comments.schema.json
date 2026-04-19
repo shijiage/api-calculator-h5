@@ -1,0 +1,27 @@
+{
+	"bsonType": "object",
+	"required": ["post_id", "openid", "content", "created_at", "audit_status"],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"post_id": { "bsonType": "string", "description": "所属推荐帖子 ID" },
+		"openid": { "bsonType": "string", "description": "评论人的 openid" },
+		"content": { "bsonType": "string", "description": "评论内容" },
+		"author_nickname": { "bsonType": "string", "description": "评论时的昵称快照" },
+		"author_masked": { "bsonType": "string", "description": "脱敏后的评论人展示名" },
+		"author_avatar_text": { "bsonType": "string", "description": "头像占位字母" },
+		"author_avatar_fileid": { "bsonType": "string", "description": "头像 fileID 快照" },
+		"audit_status": { "bsonType": "string", "description": "审核状态" },
+		"audit_source": { "bsonType": "string", "description": "审核来源" },
+		"audit_reason": { "bsonType": "string", "description": "审核说明" },
+		"risk_score": { "bsonType": "int", "description": "风险分数" },
+		"risk_tags": { "bsonType": "array", "description": "风险标签" },
+		"reviewed_by": { "bsonType": "string", "description": "审核人 openid" },
+		"reviewed_at": { "bsonType": "long", "description": "审核时间戳" },
+		"created_at": { "bsonType": "long", "description": "评论时间戳" }
+	}
+}

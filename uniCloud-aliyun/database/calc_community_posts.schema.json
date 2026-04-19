@@ -1,0 +1,36 @@
+{
+	"bsonType": "object",
+	"required": ["openid", "site_name", "site_url", "summary", "created_at", "audit_status"],
+	"permission": {
+		"read": false,
+		"create": false,
+		"update": false,
+		"delete": false
+	},
+	"properties": {
+		"openid": { "bsonType": "string", "description": "发布人的 openid" },
+		"site_name": { "bsonType": "string", "description": "站点名称" },
+		"site_url": { "bsonType": "string", "description": "站点完整链接" },
+		"site_domain": { "bsonType": "string", "description": "站点域名" },
+		"summary": { "bsonType": "string", "description": "一句话点评" },
+		"normalized_site_name": { "bsonType": "string", "description": "标准化站点名" },
+		"author_nickname": { "bsonType": "string", "description": "发布时的昵称快照" },
+		"author_masked": { "bsonType": "string", "description": "脱敏后的作者展示名" },
+		"author_avatar_text": { "bsonType": "string", "description": "头像占位字母" },
+		"author_avatar_fileid": { "bsonType": "string", "description": "头像 fileID 快照" },
+		"hot_score": { "bsonType": "int", "description": "热度分数" },
+		"like_count": { "bsonType": "int", "description": "点赞数" },
+		"comment_count": { "bsonType": "int", "description": "评论数" },
+		"copy_count": { "bsonType": "int", "description": "复制数" },
+		"audit_status": { "bsonType": "string", "description": "审核状态" },
+		"audit_source": { "bsonType": "string", "description": "审核来源" },
+		"audit_reason": { "bsonType": "string", "description": "审核说明" },
+		"risk_score": { "bsonType": "int", "description": "风险分数" },
+		"risk_tags": { "bsonType": "array", "description": "风险标签" },
+		"report_count": { "bsonType": "int", "description": "被举报次数" },
+		"reviewed_by": { "bsonType": "string", "description": "审核人 openid" },
+		"reviewed_at": { "bsonType": "long", "description": "审核时间戳" },
+		"created_at": { "bsonType": "long", "description": "发布时间戳" },
+		"updated_at": { "bsonType": "long", "description": "更新时间戳" }
+	}
+}

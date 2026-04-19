@@ -2,6 +2,7 @@
 
 const fs = require('fs')
 const path = require('path')
+const crypto = require('crypto')
 
 /**
  * 微信小程序 code 换 openid，并写入用户表、返回当前用户总数。
@@ -21,6 +22,7 @@ const path = require('path')
 const db = uniCloud.database()
 const USERS = 'calc_users'
 const LOGIN_LOGS = 'calc_login_logs'
+const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
 /** 东八区可读时间，便于在云数据库控制台查看 */
 function formatLoginTime(ms) {
@@ -47,6 +49,38 @@ function loadWxCredentials() {
 	const appId = String(fileCfg.appId || fileCfg.WX_APPID || process.env.WX_APPID || '').trim()
 	const appSecret = String(fileCfg.appSecret || fileCfg.WX_SECRET || process.env.WX_SECRET || '').trim()
 	return { appId, appSecret }
+}
+
+function generateRandomEnglishUsername(length = 10) {
+	const letters = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'
+	let username = ''
+	for (let i = 0; i < length; i += 1) {
+		username += letters.charAt(Math.floor(Math.random() * letters.length))
+	}
+	return username
+}
+
+async function generateUniqueDefaultNickname(users, maxAttempts = 8) {
+	for (let i = 0; i < maxAttempts; i += 1) {
+		const nickname = generateRandomEnglishUsername(10)
+		try {
+			const exists = await users.where({ nickname }).limit(1).get()
+			const rows = Array.isArray(exists && exists.data) ? exists.data : []
+			if (!rows.length) return nickname
+		} catch (e) {
+			// 昵称查重失败时退化为直接使用当前随机值，避免阻塞注册流程。
+			return nickname
+		}
+	}
+	return generateRandomEnglishUsername(10)
+}
+
+function generateSessionToken() {
+	return crypto.randomBytes(24).toString('hex')
+}
+
+function hashSessionToken(token) {
+	return crypto.createHash('sha256').update(String(token || '')).digest('hex')
 }
 
 exports.main = async (event) => {
@@ -108,6 +142,9 @@ exports.main = async (event) => {
 
 	const users = db.collection(USERS)
 	const now = Date.now()
+	const sessionToken = generateSessionToken()
+	const sessionTokenHash = hashSessionToken(sessionToken)
+	const sessionExpiresAt = now + SESSION_TTL_MS
 	let isNew = false
 	let isAdmin = false
 
@@ -117,16 +154,24 @@ exports.main = async (event) => {
 		const exists = !!(doc && (doc._id || doc.openid))
 		if (!exists) {
 			isNew = true
+			const nickname = await generateUniqueDefaultNickname(users)
 			await users.doc(openid).set({
 				openid,
 				unionid: unionid || '',
+				nickname,
 				isAdmin: false,
 				create_date: now,
-				last_login: now
+				last_login: now,
+				session_token_hash: sessionTokenHash,
+				session_expires_at: sessionExpiresAt
 			})
 		} else {
 			isAdmin = !!doc.isAdmin
-			const patch = { last_login: now }
+			const patch = {
+				last_login: now,
+				session_token_hash: sessionTokenHash,
+				session_expires_at: sessionExpiresAt
+			}
 			if (unionid) patch.unionid = unionid
 			await users.doc(openid).update(patch)
 		}
@@ -159,6 +204,8 @@ exports.main = async (event) => {
 		openid,
 		isNew,
 		userCount,
-		isAdmin
+		isAdmin,
+		sessionToken,
+		sessionExpiresAt
 	}
 }

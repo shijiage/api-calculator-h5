@@ -18,6 +18,7 @@ const LOCAL_SEED_PATHS = [
 ]
 const DB_PAGE_SIZE = 200
 const WRITE_CONCURRENCY = 8
+const FEATURED_LIMIT_PER_SECTION = 5
 
 const MODEL_META = {
 	'claude-opus-4-7': {
@@ -248,14 +249,22 @@ function normalizeStatusType(type) {
 	return 'normal'
 }
 
+function getDisplayStatusText(doc, statusType) {
+	if (statusType === 'excellent') return '流畅'
+	if (statusType === 'good') return '良好'
+	return String(doc?.last_result || '').trim() === 'fail' ? '失败' : '异常'
+}
+
 function normalizeDoc(doc) {
+	const modelLabel = String(doc.model_label || doc.modelLabel || '')
+	const statusType = normalizeStatusType(doc.status_type)
 	return {
 		sectionKey: String(doc.section_key || ''),
-		sectionTitle: String(doc.section_title || ''),
+		sectionTitle: modelLabel || String(doc.section_title || ''),
 		sectionSort: Number(doc.section_sort || 0),
 		sort: Number(doc.sort || 0),
 		name: String(doc.site_name || ''),
-		modelLabel: String(doc.model_label || ''),
+		modelLabel,
 		modelKey: String(doc.model_key || ''),
 		siteUrl: String(doc.site_url || ''),
 		siteDomain: String(doc.site_domain || ''),
@@ -266,13 +275,51 @@ function normalizeDoc(doc) {
 		latency: String(doc.latency || ''),
 		onlineRate: String(doc.online_rate || ''),
 		mixRate: String(doc.mix_rate || ''),
-		statusText: String(doc.status_text || ''),
-		statusType: normalizeStatusType(doc.status_type),
+		statusText: getDisplayStatusText(doc, statusType),
+		statusType,
 		defaultRanking:
 			typeof doc.default_ranking === 'number' ? Number(doc.default_ranking) : null,
 		sourceUpdatedAt:
 			typeof doc.source_updated_at === 'number' ? Number(doc.source_updated_at) : null
 	}
+}
+
+function compareDisplayDoc(a, b) {
+	if (a.sectionSort !== b.sectionSort) return a.sectionSort - b.sectionSort
+	if (a.sort !== b.sort) return a.sort - b.sort
+	return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN')
+}
+
+function normalizeDisplayRows(rows) {
+	return (Array.isArray(rows) ? rows : [])
+		.map(normalizeDoc)
+		.filter((item) => item.sectionTitle && item.name)
+		.sort(compareDisplayDoc)
+}
+
+function buildFeaturedSeedRows(payload, limitPerSection = FEATURED_LIMIT_PER_SECTION) {
+	const normalized = normalizeDisplayRows(
+		payloadToDocs(payload).docs.filter((item) => item && item.enabled)
+	)
+	if (!normalized.length) return []
+
+	const grouped = new Map()
+	for (const item of normalized) {
+		const key = String(item.modelKey || item.sectionKey || item.sectionTitle || '').trim()
+		if (!key) continue
+		if (!grouped.has(key)) grouped.set(key, [])
+		const items = grouped.get(key)
+		if (items.length >= limitPerSection) continue
+		items.push(item)
+	}
+
+	return Array.from(grouped.values()).flat()
+}
+
+function loadBundledFeaturedRows() {
+	const payload = readLocalSeedPayload()
+	if (!payload) return []
+	return buildFeaturedSeedRows(payload)
 }
 
 function matchesKeyword(sectionTitle, item, keyword) {
@@ -762,13 +809,26 @@ exports.main = async (event) => {
 	}
 
 	const keyword = String(payloadEvent.keyword || '').trim()
-	const normalized = rows
-		.map(normalizeDoc)
-		.filter((item) => item.sectionTitle && item.name)
-		.sort((a, b) => {
-			if (a.sectionSort !== b.sectionSort) return a.sectionSort - b.sectionSort
-			return a.sort - b.sort
-		})
+	const hvoyRows = rows.filter((item) => String(item?.source || '').trim() === 'hvoy')
+	let bundledFeaturedRows = []
+	if (hvoyRows.length < FEATURED_LIMIT_PER_SECTION * Object.keys(MODEL_META).length) {
+		bundledFeaturedRows = loadBundledFeaturedRows()
+		if (!bundledFeaturedRows.length) {
+			try {
+				const fetched = await fetchHvoyPayload()
+				bundledFeaturedRows = buildFeaturedSeedRows(fetched?.payload)
+			} catch (e) {}
+		}
+	}
+	const sourceRows =
+		hvoyRows.length >= FEATURED_LIMIT_PER_SECTION * Object.keys(MODEL_META).length
+			? hvoyRows
+			: bundledFeaturedRows.length
+				? bundledFeaturedRows
+				: rows
+	const normalized = Array.isArray(sourceRows) && sourceRows.length && sourceRows[0]?.sectionTitle
+		? sourceRows.filter((item) => item.sectionTitle && item.name).sort(compareDisplayDoc)
+		: normalizeDisplayRows(sourceRows)
 
 	const map = new Map()
 	for (const item of normalized) {
